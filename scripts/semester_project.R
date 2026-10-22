@@ -161,13 +161,15 @@ books_clean$g_per_page <- books_clean$weight_kg * 1000 / books_clean$pages
 
 print(summary(books_clean$g_per_page))
 
-# Bounds using 3 * IQR (extreme outliers only)
-Q1_gpp <- quantile(books_clean$g_per_page, 0.25, na.rm = TRUE)
-Q3_gpp <- quantile(books_clean$g_per_page, 0.75, na.rm = TRUE)
-IQR_gpp <- Q3_gpp - Q1_gpp
-
-lower_gpp <- Q1_gpp - 3 * IQR_gpp
-upper_gpp <- Q3_gpp + 3 * IQR_gpp
+# Bounds based on physical reasoning instead of the IQR:
+# a typical book page weighs about 1.3 g. The IQR bounds (3 * IQR)
+# were too strict, because thin books naturally have more grams
+# per page (the cover weighs the same regardless of the number
+# of pages), so many valid books were flagged.
+# Values below 0.3 g/page or above 10 g/page are physically
+# implausible and are treated as data entry errors.
+lower_gpp <- 0.3
+upper_gpp <- 10
 
 print(c(lower = lower_gpp, upper = upper_gpp))
 
@@ -229,6 +231,17 @@ print(sum(books_clean$pages <= 0, na.rm = TRUE))
 
 # Books with zero reviews
 print(sum(books_clean$n_reviews == 0, na.rm = TRUE))
+
+# 2.13b Books without reviews
+# The 123 books with n_reviews = 0 have avg_reviews = NA but star
+# proportions equal to 0. Since these books have no reviews, the
+# star proportions are not defined, so they are set to NA.
+star_vars <- c("star5", "star4", "star3", "star2", "star1")
+books_clean[books_clean$n_reviews == 0, star_vars] <- NA
+
+# Check: star proportions should now sum to ~1 for all remaining books
+star_sum <- rowSums(books_clean[, star_vars])
+print(summary(star_sum))
 
 
 # 2.14 Convert language to a factor
@@ -311,55 +324,75 @@ dir.create("plots", showWarnings = FALSE)
 # 4.1 Histograms of the main numeric variables
 main_vars <- c("price", "pages", "avg_reviews", "n_reviews", "weight_kg")
 
-png("plots/4_1_histograms.png", width = 1200, height = 800)
-par(mfrow = c(2, 3))   # 2 rows x 3 columns of plots
+png("plots/4_1_histograms.png",
+    width = 12, height = 8, units = "in", res = 150)      
+par(mfrow = c(2, 3),   # 2 rows x 3 columns of plots
+    cex.main = 1.5, cex.lab = 1.3, cex.axis = 1.1)         
 for (v in main_vars) {
   hist(books_clean[[v]], main = paste("Histogram of", v),
-       xlab = v, col = "lightblue", border = "white")
+       xlab = v, col = "lightblue", border = "white", breaks=30)
 }
 par(mfrow = c(1, 1))   # reset the layout
 dev.off()
+# Observations:
+# - price and weight_kg are right-skewed (peaks around $40-50 and 0.5-0.7 kg).
+# - pages has a main peak around 250-400 pages and a smaller one around
+#   750-800 pages (possibly large textbooks).
+# - avg_reviews is left-skewed; there is a separate peak at exactly 5.0,
+#   which corresponds mostly to books with very few reviews.
+# - n_reviews is extremely right-skewed, so a log transformation is used (4.3).
+
 
 # 4.2 Boxplots of the main numeric variables
-png("plots/4_2_boxplots.png", width = 1200, height = 800)
-par(mfrow = c(2, 3))
+png("plots/4_2_boxplots.png",
+    width = 12, height = 8, units = "in", res = 150)      
+par(mfrow = c(2, 3),
+    cex.main = 1.5, cex.lab = 1.3, cex.axis = 1.1)         
 for (v in main_vars) {
   boxplot(books_clean[[v]], main = paste("Boxplot of", v),
           ylab = v, col = "lightgreen")
 }
 par(mfrow = c(1, 1))
-dev.off() 
-
+dev.off()
 
 # 4.3 Log-transformed number of reviews (very right-skewed variable)
-png("plots/4_3_log_reviews.png", width = 800, height = 600)
+png("plots/4_3_log_reviews.png",
+    width = 7, height = 5, units = "in", res = 150)         
 hist(log1p(books_clean$n_reviews),
      main = "Histogram of log(1 + n_reviews)",
      xlab = "log(1 + n_reviews)", col = "lightblue", border = "white")
-
 dev.off()
 
 # 4.4 Average distribution of star ratings across books
-png("plots/4_4_star_ratings.png", width = 800, height = 600)
+# (books without reviews are excluded, since their star values are NA)
+png("plots/4_4_star_ratings.png",
+    width = 7, height = 5, units = "in", res = 150)         
 star_means <- colMeans(books_clean[, c("star1", "star2", "star3",
                                        "star4", "star5")], na.rm = TRUE)
 barplot(star_means, main = "Average proportion of each star rating",
-        ylab = "Proportion", col = "orange")
+        ylab = "Proportion", col = "orange",
+        names.arg = c("1 star", "2 stars", "3 stars",
+                      "4 stars", "5 stars"),                
+        ylim = c(0, 0.8))                                   
 dev.off()
 
 # 4.5 Scatterplots between pairs of variables
-png("plots/4_5_scatterplots.png", width = 1500, height = 500)
-par(mfrow = c(1, 3))
+png("plots/4_5_scatterplots.png",
+    width = 15, height = 5, units = "in", res = 150)        
+par(mfrow = c(1, 3),
+    cex.main = 1.6, cex.lab = 1.4, cex.axis = 1.2)          
 plot(books_clean$pages, books_clean$price,
-     main = "Price vs Pages", xlab = "Pages", ylab = "Price ($)")
+     main = "Price vs Pages", xlab = "Pages", ylab = "Price ($)",
+     pch = 19, cex = 0.9, col = rgb(0, 0, 1, 0.4))          
 plot(books_clean$pages, books_clean$weight_kg,
-     main = "Weight vs Pages", xlab = "Pages", ylab = "Weight (kg)")
+     main = "Weight vs Pages", xlab = "Pages", ylab = "Weight (kg)",
+     pch = 19, cex = 0.9, col = rgb(0, 0.5, 0, 0.4))        
 plot(log1p(books_clean$n_reviews), books_clean$avg_reviews,
      main = "Rating vs log(Reviews)",
-     xlab = "log(1 + n_reviews)", ylab = "Average rating")
+     xlab = "log(1 + n_reviews)", ylab = "Average rating",
+     pch = 19, cex = 0.9, col = rgb(1, 0.4, 0, 0.4))        
 par(mfrow = c(1, 1))
 dev.off()
-
 
 # Observations:
 # - Weight has a strong positive linear relationship with pages.
