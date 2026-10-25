@@ -486,7 +486,20 @@ summary_table <- t(
 )
 
 print(round(summary_table, 3))
+png("plots/3_4_weight_outliers.png",
+    width = 8, height = 6,
+    units = "in", res = 150)
 
+boxplot(
+  books_clean$weight_kg,
+  main = "Outlier Detection in Book Weight",
+  ylab = "Book Weight (kg)",
+  col = "lightblue",
+  border = "darkblue",
+  pch = 16
+)
+
+dev.off()
 
 # 3.5 Compare original and filtered weight statistics
 
