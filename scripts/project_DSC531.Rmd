@@ -388,14 +388,23 @@ for (v in categorical_vars) {
 
 ```
 
+```{r}
+
+
+
+
+```
+
 
 ```{r}
-lm.full=lm( ~.-Rank-Country,data)
+lm.full=lm(price ~ pages+avg_reviews+n_reviews+star5+star4+star3+star2+star1+
+             language,data = books_clean)
 
 residuals.state=lm.full$residuals
 qqnorm(residuals.state)
 qqline(residuals.state)
 plot(lm.full$fitted.values,residuals.state) 
+
 summary(lm.full)
 
 ```
