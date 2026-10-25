@@ -25,6 +25,7 @@ str(books)
 
 # 1.5 Display summary statistics
 print(summary(books))
+print()
 
 # 1.6 Check missing values (NA)
 print(colSums(is.na(books)))
