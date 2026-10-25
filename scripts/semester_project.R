@@ -18,10 +18,14 @@ print(head(books))
 str(books)
 
 # 1.5 Summary statistics
+print('Summary statistics:')
 print(summary(books))
+print()
 
 # 1.6 Check missing values
+print('Missing values:')  
 print(colSums(is.na(books)))
+print()
 
 
 # ==========================================
@@ -160,3 +164,5 @@ print(nrow(weight_outliers))
 print("Detected weight outliers:")
 print(weight_outliers[, c("price", "pages",
                           "weight", "weight_kg")])
+
+
