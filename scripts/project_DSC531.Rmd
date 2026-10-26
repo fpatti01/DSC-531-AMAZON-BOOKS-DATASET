@@ -421,3 +421,76 @@ plot(lm.full$fitted.values,residuals.state)
 summary(lm.log.full)
 
 ```
+
+```{r}
+bss=regsubsets(log(1+price) ~ pages+avg_reviews+n_reviews+star5+star4+star3+star2+star1+
+             language , data = books_clean , nvmax=9)
+bss.summary=summary(bss) 
+summary(bss)
+```
+
+```{r}
+par(mfrow=c(2,2))
+plot(bss.summary$rss, xlab="Number of Variables", ylab="SSres", type="l") 
+
+K0=which.min(bss.summary$rss) 
+points(K0, bss.summary$rss[K0], col="red",cex=2,pch=20)
+plot(bss.summary$adjr2,xlab="Number of Variables", ylab="Adjusted RSq", type="l") 
+
+K1=which.max(bss.summary$adjr2) 
+points(K1, bss.summary$adjr2[K1], col="red",cex=2,pch=20)
+plot(bss.summary$cp,xlab="Number of Variables", ylab="C_p", type="l")
+
+K2=which.min(bss.summary$cp) 
+points(K2, bss.summary$cp[K2], col="red",cex=2,pch=20)
+plot(bss.summary$bic,xlab="Number of Variables", ylab="BIC", type="l") 
+
+K3=which.min(bss.summary$bic) 
+points(K3, bss.summary$bic[K3], col="red",cex=2,pch=20)
+```
+```{r}
+predict.regsubsets=function(object, newdata, id, ...){ 
+  form=as.formula(object$call[[2]]) 
+  mat=model.matrix(form, newdata)
+  coefi=coef(object, id=id)
+  xvars=names(coefi)
+  return(mat[,xvars]%*%coefi)
+}
+```
+
+```{r}
+K=10
+q=9 
+M=101
+
+cv.errors=array(NA, dim = c(K, q, M))
+for(m in 1:M)
+{
+  folds=sample(1:K, nrow(books_clean), replace=TRUE) 
+
+  for(k in 1:K){
+    bss.cv=regsubsets(log(1+price) ~ pages+avg_reviews+n_reviews+star5+star4+star3+star2+star1+
+             language,books_clean[folds!=k,],nvmax=q) 
+
+    for(p in 1:q) {
+      # Predict on validation fold
+      cv.pred <- predict.regsubsets(bss.cv, newdata = books_clean[folds == k, ], id = p)
+      
+      # FIX: Apply log(1 + price) to actuals so scales match!
+      actuals <- log(1 + books_clean$price[folds == k])
+      cv.errors[k, p, m] <- mean((actuals - cv.pred)^2)
+    }
+  }
+}
+
+mean.cv.errors=apply(cv.errors,2,mean)
+
+p.cv=which.min(mean.cv.errors)
+plot(mean.cv.errors,type='b',xlab = "Model size")
+points(p.cv, mean.cv.errors[p.cv], col="red",cex=2,pch=20)
+```
+
+```{r}
+
+
+```
