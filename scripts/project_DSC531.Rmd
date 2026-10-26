@@ -408,3 +408,16 @@ plot(lm.full$fitted.values,residuals.state)
 summary(lm.full)
 
 ```
+
+```{r}
+lm.log.full=lm(log(1+price) ~ pages+avg_reviews+n_reviews+star5+star4+star3+star2+star1+
+             language,data = books_clean)
+
+residuals.state=lm.log.full$residuals
+qqnorm(residuals.state)
+qqline(residuals.state)
+plot(lm.full$fitted.values,residuals.state) 
+
+summary(lm.log.full)
+
+```
