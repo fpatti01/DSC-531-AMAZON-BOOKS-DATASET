@@ -1,0 +1,10 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2870
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fswiss\fcharset0 Helvetica;}
+{\colortbl;\red255\green255\blue255;}
+{\*\expandedcolortbl;;}
+\paperw11900\paperh16840\margl1440\margr1440\vieww12080\viewh12980\viewkind0
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural\partightenfactor0
+
+\f0\fs24 \cf0 First, to analyse the variability of the variables we will construct histograms of all numerical variables. It can be seen that most of the variables are heavily right-skewed. The only variable that is left-skewed is average reviews. So it seems that people tend to leave positive reviews more often than negative ones. To transform the skewed variables we will use log transformation. All the variables are positive so we will not meet any problems here. Log transformation is an important step which can help for the future model building and hypothesis testing. To see how transformation influenced the data we will plot all the numerical variables against average reviews and then their log transformed versions. Average reviews were chosen as a possible variable for prediction in the future. It can be seen that the points moved from the left corner to the right and the data looks more equally spreaded. \
+After that we start analysing correlations between variables. For this purpose we will build a heat map plot based on correlation matrix. According to the plot, price and number of pages have the moderate positive correlation which can be easily explained by the fact that bigger books need bigger amount of materials. The same explanation can be given for moderate positive correlation between price and the weight. Obviously, pages and weighs are highly correlated. \
+However, this plot also shows us that the average number of reviews do not correlate with any of the variables (the correlation is almost 0), so it is independent of price, number of pages, weight and etc. It means that a prediction model cannot be created here since variables do not affect the average reviews in any way. }
