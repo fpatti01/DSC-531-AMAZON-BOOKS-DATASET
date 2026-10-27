@@ -16,6 +16,7 @@ library(moments)
 library(DescTools)
 library(tidyverse)
 library(corrplot)
+library(leaps)
 books <- read.csv("C:/Users/mmari/OneDrive/Υπολογιστής/DSC531/DSC-531-AMAZON-BOOKS-DATASET/data/Amazon_Data_Science_Books.csv")
 
 
@@ -360,11 +361,36 @@ for (v in numeric_vars) {
     theme(plot.title = element_text(face = "bold", size = 14))
   
   print(p)
-  # Optional: Save plots automatically for your report
-  # ggsave(filename = paste0("plot_", v, ".png"), plot = p, width = 7, height = 5)
 }
 ```
 
+
+```{r}
+# 1. Select numeric variables and convert to long format for faceted plotting
+books_long <- books_clean %>%
+  select(where(is.numeric)) %>%
+  pivot_longer(cols = everything(), names_to = "variable", values_to = "value")
+
+# 2. Create a single faceted box plot for all numeric variables
+ggplot(books_long, aes(x = variable, y = value, fill = variable)) +
+  geom_boxplot(alpha = 0.7, outlier.color = "red", outlier.shape = 16) +
+  facet_wrap(~ variable, scales = "free") +
+  labs(
+    title = "Box Plots for Numerical Variables",
+    subtitle = "Checking distribution and potential outliers",
+    x = "",
+    y = "Value"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    axis.text.x = element_blank(), # Hide redundant x-axis labels
+    axis.ticks.x = element_blank(),
+    strip.text = element_text(face = "bold", size = 11), # Panel titles
+    plot.title = element_text(face = "bold", size = 14)
+  )
+
+```
 
 
 ```{r}
@@ -388,13 +414,6 @@ for (v in categorical_vars) {
 
 ```
 
-```{r}
-
-
-
-
-```
-
 
 ```{r}
 lm.full=lm(price ~ pages+avg_reviews+n_reviews+star5+star4+star3+star2+star1+
@@ -410,7 +429,7 @@ summary(lm.full)
 ```
 
 ```{r}
-lm.log.full=lm(log(1+price) ~ pages+avg_reviews+n_reviews+star5+star4+star3+star2+star1+
+lm.log.full=lm(log(1+price) ~ log(1+pages)+exp(avg_reviews)+n_reviews+star5+log(1+star4)+log(1+star3)+log(1+star2)+log(1+star1)+
              language,data = books_clean)
 
 residuals.state=lm.log.full$residuals
@@ -423,7 +442,7 @@ summary(lm.log.full)
 ```
 
 ```{r}
-bss=regsubsets(log(1+price) ~ pages+avg_reviews+n_reviews+star5+star4+star3+star2+star1+
+bss=regsubsets(log(1+price) ~ log(1+pages)+exp(avg_reviews)+n_reviews+star5+log(1+star4)+log(1+star3)+log(1+star2)+log(1+star1)+
              language , data = books_clean , nvmax=9)
 bss.summary=summary(bss) 
 summary(bss)
@@ -449,45 +468,92 @@ K3=which.min(bss.summary$bic)
 points(K3, bss.summary$bic[K3], col="red",cex=2,pch=20)
 ```
 ```{r}
-predict.regsubsets=function(object, newdata, id, ...){ 
-  form=as.formula(object$call[[2]]) 
-  mat=model.matrix(form, newdata)
-  coefi=coef(object, id=id)
-  xvars=names(coefi)
-  return(mat[,xvars]%*%coefi)
-}
+# Κρατάμε μόνο τις γραμμές που ΔΕΝ έχουν κανένα NA στις μεταβλητές του μοντέλου
+vars_model <- c("price", "pages", "avg_reviews", "n_reviews", 
+                "star5", "star4", "star3", "star2", "star1", "language")
+
+books_clean_lm <- na.omit(books_clean[, vars_model])
+colSums(is.na(books_clean_lm[, c("price", "pages", "avg_reviews", "n_reviews", star_vars, "language")]))
+
 ```
 
+
 ```{r}
-K=10
-q=9 
-M=101
 
-cv.errors=array(NA, dim = c(K, q, M))
-for(m in 1:M)
-{
-  folds=sample(1:K, nrow(books_clean), replace=TRUE) 
+books_clean_lm <- books_clean
 
-  for(k in 1:K){
-    bss.cv=regsubsets(log(1+price) ~ pages+avg_reviews+n_reviews+star5+star4+star3+star2+star1+
-             language,books_clean[folds!=k,],nvmax=q) 
+# 1. Αφαιρούμε τις γραμμές όπου λείπει η τιμή (price) ή η γλώσσα (language)
+books_clean_lm <- books_clean_lm[!is.na(books_clean_lm$price) & !is.na(books_clean_lm$language) ]
+
+# 2. Imputation για τις σελίδες (pages) με τη διάμεσο
+median_pages <- median(books_clean_lm$pages, na.rm = TRUE)
+books_clean_lm$pages[is.na(books_clean_lm$pages)] <- median_pages
+
+# 3. Δημιουργία indicator variable για τις κριτικές (1 αν έχει, 0 αν δεν έχει)
+books_clean_lm$has_reviews <- ifelse(!is.na(books_clean_lm$n_reviews) & books_clean_lm$n_reviews > 0, 1, 0)
+
+# 4. Imputation στον μέσο όρο κριτικών (avg_reviews) με τον γενικό μέσο όρο
+mean_avg_reviews <- mean(books_clean_lm$avg_reviews, na.rm = TRUE)
+books_clean_lm$avg_reviews[is.na(books_clean_lm$avg_reviews)] <- mean_avg_reviews
+
+# 5. Αντικατάσταση των NA στα αστέρια με 0 (εφόσον δεν υπάρχουν κριτικές)
+books_clean_lm[is.na(books_clean_lm$n_reviews) | books_clean_lm$n_reviews == 0, star_vars] <- 0
+
+# 6. Τελικός έλεγχος (πρέπει όλα ταθροίσματα να είναι 0)
+colSums(is.na(books_clean_lm[, c("price", "pages", "avg_reviews", "n_reviews", star_vars, "language", "has_reviews")]))
+
+```
+
+
+
+```{r}
+
+# 1. Συνάρτηση predict για regsubsets
+predict.regsubsets <- function(object, newdata, id, ...) {
+  form <- as.formula(object$call[[2]])
+  mat <- model.matrix(form, newdata)
+  coefi <- coef(object, id = id)
+  xvars <- names(coefi)
+  return(mat[, xvars] %*% coefi)
+}
+
+# 2. Παράμετροι (q = 7 μεταβλητές,  αφαιρώντας το star1)
+K <- 10
+q <- 7  
+M <- 101
+
+cv.errors <- array(NA, dim = c(K, q, M))
+
+# 3. CV Loop
+for(m in 1:M) {
+  folds <- sample(1:K, nrow(books_clean_lm), replace = TRUE)  
+
+  for(k in 1:K) {
+    # Κρατάμε το n_reviews και αφαιρούμε το star1 ως reference group
+    bss.cv <- regsubsets(log(1+price) ~ log(1+pages)+exp(avg_reviews)+n_reviews+exp(star5)+log(1+star4)+log(1+star3)+log(1+star2)+
+             language,
+                         data = books_clean_lm[folds != k, ], 
+                         nvmax = q) 
 
     for(p in 1:q) {
-      # Predict on validation fold
-      cv.pred <- predict.regsubsets(bss.cv, newdata = books_clean[folds == k, ], id = p)
-      
-      # FIX: Apply log(1 + price) to actuals so scales match!
-      actuals <- log(1 + books_clean$price[folds == k])
+      cv.pred <- predict.regsubsets(bss.cv, newdata = books_clean_lm[folds == k, ], id = p)
+      actuals <- log(1 + books_clean_lm$price[folds == k])
       cv.errors[k, p, m] <- mean((actuals - cv.pred)^2)
     }
   }
 }
 
-mean.cv.errors=apply(cv.errors,2,mean)
+# 4. Υπολογισμός μέσων σφαλμάτων & Γράφημα
+mean.cv.errors <- apply(cv.errors, 2, mean)
+p.cv <- which.min(mean.cv.errors)
 
-p.cv=which.min(mean.cv.errors)
-plot(mean.cv.errors,type='b',xlab = "Model size")
-points(p.cv, mean.cv.errors[p.cv], col="red",cex=2,pch=20)
+plot(mean.cv.errors, type = 'b', pch = 19,
+     xlab = "Model Size (Number of Predictors)", 
+     ylab = "Mean Squared Error (Log Scale)",
+     main = "10-Fold CV for Best Subset Selection (Ref Group: star1)")
+points(p.cv, mean.cv.errors[p.cv], col = "red", cex = 2, pch = 20)
+
+cat("Optimal model size selected by CV:", p.cv, "\n")
 ```
 
 ```{r}
