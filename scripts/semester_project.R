@@ -520,6 +520,19 @@ print(colSums(is.na(books_clean)))
 
 print(dim(books_clean))
 
+# Step 3.8 - Calculate Coefficient of Variation (%)
+
+cv_percent <- function(x) {
+  x <- x[!is.na(x)]
+  100 * sd(x) / mean(x)
+}
+
+sapply(
+  books_clean[c("price", "pages", "avg_reviews",
+                "n_reviews", "weight_analysis")],
+  cv_percent
+)
+
 
 # ==========================================
 # 4. DATA VISUALIZATION
