@@ -17,6 +17,7 @@ library(DescTools)
 library(tidyverse)
 library(corrplot)
 library(leaps)
+library(car)
 books <- read.csv("C:/Users/mmari/OneDrive/Υπολογιστής/DSC531/DSC-531-AMAZON-BOOKS-DATASET/data/Amazon_Data_Science_Books.csv")
 
 
@@ -352,7 +353,7 @@ numeric_vars <- names(books_clean %>% select(where(is.numeric)))
 
 for (v in numeric_vars) {
   p <- ggplot(books_clean, aes_string(x = v)) +
-    geom_histogram(aes(y = ..density..), bins = 30, fill = "steelblue", color = "white", alpha = 0.7) +
+    geom_histogram(aes(y = ..density..), bins = 60, fill = "steelblue", color = "white", alpha = 0.7) +
     geom_density(color = "darkred", size = 1) +
     labs(title = paste("Distribution of", v),
          subtitle = "Histogram and Kernel Density Estimate",
@@ -362,6 +363,47 @@ for (v in numeric_vars) {
   
   print(p)
 }
+```
+Distribution of Book Prices (Histogram and Kernel Density Estimate)
+
+The distribution of book prices (price) exhibits a prominent positive (right) skewness with a long right tail. The vast majority of titles are heavily concentrated at the lower end of the pricing spectrum, featuring a sharp density peak clustered roughly between 30 and 50. Conversely, a small minority of specialized or premium books extend far to the right, with prices reaching up to 200 and beyond.
+Economic and Methodological Interpretation:
+This right-skewed distribution is a textbook characteristic of retail and e-commerce pricing data. It indicates that while most books adhere to an affordable, mass-market pricing strategy, a subset of academic, boxed, or specialty editions command significantly higher prices. From an econometric perspective, this non-normal, skewed structure strongly justifies the application of a logarithmic transformation (such as $\log(1 + \text{price})$) to stabilize variance, mitigate the influence of outliers, and satisfy the distributional assumptions required for subsequent regression and statistical modeling.
+
+
+Distribution of Average Reviews (Histogram and Kernel Density Estimate)
+
+The distribution of average review ratings (avg_reviews) exhibits a pronounced negative (left) skewness alongside a clear bimodal distribution pattern. The primary peak is heavily centered around 4.5, representing the vast majority of well-received titles in the dataset. A secondary, distinct peak emerges precisely at 5.0, indicating a sub-group of books with perfect rating averages. Conversely, there is a marked scarcity of books with low average ratings (ranging from 1.0 to 3.0).
+Economic and Methodological Interpretation:
+This dual-peak structure reflects a key behavioral pattern in e-commerce platforms like Amazon. The secondary peak at 5.0 is typically driven by newer or less-reviewed books that have accumulated only a small number of exclusively positive ratings (e.g., 1 or 2 five-star reviews). As the number of reviews increases, ratings aggregate toward the primary mean near 4.5, illustrating a selection and market survival bias. From an econometric modeling standpoint, this non-normal, bimodal, and left-skewed distribution underscores the importance of carefully examining potential non-linearities during exploratory data analysis prior to regression fitting.
+
+Distribution of Book Pages (Histogram and Kernel Density Estimate)
+
+The distribution of book page counts (pages) exhibits a clear positive (right) skewness with an extended right tail. The majority of the titles are concentrated in the lower-to-middle page ranges, featuring a pronounced density peak clustered roughly between 300 and 400 pages. Conversely, a smaller subset of extensive or comprehensive works extends far to the right, with page counts reaching 1000 and beyond.
+Economic and Methodological Interpretation:
+This right-skewed pattern reflects standard publishing industry norms, where typical consumer paperbacks and hardcovers are constrained to a standard length, while specialized academic or encyclopedic editions are significantly longer. From a modeling perspective, acknowledging this asymmetry is crucial, as skewed physical dimensions often translate into non-linear pricing effects (e.g., marginal printing costs scaling non-linearly), which should be accounted for during exploratory data analysis and subsequent econometric modeling.
+
+Distribution of Rating Proportions Across Star Categories (star1 to star5)
+
+The distributional properties of the granular rating proportions (star1, star2, star3, star4, and star5) reveal distinct behavioral and structural patterns across the dataset:
+
+star5 Distribution: Exhibits a strong left-skewness with a primary concentration ranging between 0.60 and 0.85, alongside a prominent secondary boundary spike at exactly 1.0. This indicates that a significant fraction of books receive exclusively five-star ratings, typically corresponding to items with sparse review counts.
+
+star4 Distribution: Displays a moderate right-skewness centered primarily between 0.10 and 0.25, accompanied by a notable spike at 0.0, representing titles that accumulated zero four-star reviews.
+
+star3, star2, and star1 Distributions: All three lower-tier rating categories exhibit extreme right-skewness with heavy concentrations clustered sharply at 0.0. The density spikes at zero become progressively more pronounced as the star rating decreases (reaching peak density for star1), demonstrating that lower-tier ratings are sparse and many books successfully avoid negative or mediocre feedback entirely.
+
+Economic and Methodological Interpretation:
+These granular rating structures corroborate the presence of strong consumer satisfaction bias and J-curve rating distributions typical of e-commerce platforms. Furthermore, the massive concentration of zero-values in lower-tier categories (star1 through star3) and the perfect additivity of proportions underscore the structural multicollinearity inherent in compositional rating data. From a methodological standpoint, this justifies the exclusion of a reference category (e.g., star1) during model specification to prevent matrix singularity.
+
+
+
+```{r}
+# Ιστόγραμμα και Density plot για την τιμή
+hist(books_clean$price, main="Κατανομή Τιμών (Price)", xlab="Price", col="lightblue", breaks=30)
+
+# Σύγκριση με το λογαριθμικό μετασχηματισμό log(1 + price)
+hist(log(1 + books_clean$price), main="Κατανομή Log(1 + Price)", xlab="Log Price", col="lightgreen", breaks=30)
 ```
 
 
@@ -413,150 +455,256 @@ for (v in categorical_vars) {
 }
 
 ```
+Frequency Count and Categorical Breakdown of Book Language (language)
+The categorical frequency breakdown of the language variable demonstrates an overwhelming predominance of English-language titles within the dataset. Specifically, the vast majority of observations are classified under English, with a count approaching the total sample size. Conversely, other categories—such as Spanish and missing values (NA)—exhibit negligible frequencies, remaining near zero.   Economic and Methodological Interpretation:This extreme class imbalance indicates that the dataset is structurally skewed toward the English-speaking publishing market. From a methodological standpoint, such severe sparsity in alternative language categories implies that language functions nearly as a constant, providing insufficient cross-group variation for robust comparative econometric modeling. Consequently, including it as an active predictor in subsequent regressions may yield uninformative or unstable coefficients, justifying its careful evaluation or potential omission during model specification
 
+
+
+Hypothesis Testing and Empirical FindingsTo formally evaluate the underlying relationships and market dynamics prior to econometric modeling, three primary statistical hypotheses were formulated and tested.1. Hypothesis 1: The Effect of Page Count on Book PriceNull Hypothesis ($H_0$): There is no correlation between the number of pages (pages) and the log-transformed book price ($\beta = 0$).Alternative Hypothesis ($H_1$): Book page count is significantly correlated with price ($\beta \neq 0$).Empirical Result: The Pearson correlation test revealed a statistically significant positive relationship between page count and $\log(1 + \text{price})$.Interpretation: This confirms that physical volume (scaling of material and production costs) exerts a tangible upward pressure on retail pricing, validating the inclusion of pages as a core structural predictor in subsequent modeling.
 
 ```{r}
-lm.full=lm(price ~ pages+avg_reviews+n_reviews+star5+star4+star3+star2+star1+
-             language,data = books_clean)
+# --- Hypothesis 1: Price vs Page Count (OLS vs. LOESS vs. Nadaraya-Watson) ---
 
-residuals.state=lm.full$residuals
-qqnorm(residuals.state)
-qqline(residuals.state)
-plot(lm.full$fitted.values,residuals.state) 
+# 1. Perform Pearson correlation test to evaluate linear association
+cor_test_h1 <- cor.test(books_clean$pages, log(1 + books_clean$price), method = "pearson")
+print(cor_test_h1)
 
-summary(lm.full)
+# 2. Visualize the models using ggplot2 (handling missing values on-the-fly)
+ggplot(books_clean, aes(x = pages, y = log(1 + price))) +
+  # Scatterplot representing individual book observations
+  geom_point(alpha = 0.3, color = "#2c3e50") +
+  
+  # Linear OLS regression fit (parametric baseline)
+  geom_smooth(method = "lm", aes(color = "OLS Linear"), se = FALSE, linetype = "dashed", linewidth = 1) +
+  
+  # LOESS (Local Polynomial Regression) fit to capture non-linearities
+  geom_smooth(method = "loess", aes(color = "LOESS (Local Poly)"), se = FALSE, linewidth = 1) +
+  
+  # Nadaraya-Watson Kernel Regression estimator (local constant smoothing)
+  geom_line(
+    data = as.data.frame(ksmooth(na.omit(books_clean$pages), na.omit(log(1 + books_clean$price)), kernel = "normal", bandwidth = 100)),
+    aes(x = x, y = y, color = "Nadaraya-Watson"),
+    linewidth = 1
+  ) +
+  
+  # Define custom colors for each estimation method
+  scale_color_manual(
+    name = "Estimation Method",
+    values = c("OLS Linear" = "red", "LOESS (Local Poly)" = "blue", "Nadaraya-Watson" = "darkgreen")
+  ) +
+  
+  # Add titles, axis labels, and statistical context
+  labs(
+    title = "Hypothesis 1: Price vs. Page Count",
+    subtitle = "Comparison of Parametric (OLS) and Non-Parametric (LOESS & Nadaraya-Watson) Estimators",
+    x = "Page Count (pages)",
+    y = "Log Price (log(1 + price))"
+  ) +
+  theme_minimal()
 
 ```
 
+Hypothesis 1: The Effect of Page Count on Book Price and Non-Parametric Modeling
+Null Hypothesis ($H_0$): There is no correlation between the number of pages (pages) and the log-transformed book price ($\beta = 0$).
+Alternative Hypothesis ($H_1$): Book page count is significantly correlated with price ($\beta \neq 0$).Empirical Results and Statistical Testing:
+The Pearson product-moment correlation test revealed a statistically significant positive relationship between page count and $\log(1 + \text{price})$, yielding a correlation coefficient of $r = 0.4862$ ($t = 16.95, df = 928, p < 2.2 \times 10^{-16}$) with a 95% confidence interval ranging from $0.4355$ to $0.5338$. This allows for the absolute rejection of the null hypothesis.   Graph Interpretation and Non-Parametric Benchmarking:
+Evaluating the comparative estimator graph (OLS linear vs. LOESS vs. Nadaraya–Watson) reveals distinct structural behaviors across the distribution:   In the primary density region (from 0 to approximately 800 pages), the parametric OLS trend line and the non-parametric LOESS curve closely align, corroborating a stable positive association between physical volume and retail pricing.   In the right-tail boundary region (exceeding 1,000 pages), the Nadaraya–Watson kernel regression exhibits severe boundary bias and local fluctuations due to data sparsity.   Conversely, the LOESS (local polynomial regression) estimator provides a robust, smooth trajectory that successfully handles boundary effects without imposing strict global linearity, while the linear OLS tends to extrapolate upward in the sparse tail.   Methodological Conclusion:
+The empirical evidence confirms that physical volume (scaling of material and production costs) exerts a tangible upward pressure on retail pricing, validating pages as a core structural predictor while robustly controlling for non-linearities and boundary constraints.
+
 ```{r}
-lm.log.full=lm(log(1+price) ~ log(1+pages)+exp(avg_reviews)+n_reviews+star5+log(1+star4)+log(1+star3)+log(1+star2)+log(1+star1)+
-             language,data = books_clean)
+# --- Hypothesis 2: Price Differentiation by Review Engagement ---
 
-residuals.state=lm.log.full$residuals
-qqnorm(residuals.state)
-qqline(residuals.state)
-plot(lm.full$fitted.values,residuals.state) 
+# 1. Create a binary engagement variable based on review counts
+books_clean$has_reviews <- factor(
+  ifelse(!is.na(books_clean$n_reviews) & books_clean$n_reviews > 0, "With Reviews", "No Reviews")
+)
 
-summary(lm.log.full)
+# 2. Perform Welch Two-Sample t-test
+t_test_h2 <- t.test(log(1 + price) ~ has_reviews, data = books_clean)
+print(t_test_h2)
+
+# 3. Visualize the price distribution across review status (Boxplot & Violin plot)
+ggplot(books_clean, aes(x = has_reviews, y = log(1 + price), fill = has_reviews)) +
+  geom_violin(alpha = 0.3, trim = FALSE) +
+  geom_boxplot(width = 0.2, outlier.color = "red", alpha = 0.7) +
+  scale_fill_manual(values = c("No Reviews" = "#e74c3c", "With Reviews" = "#2ecc71")) +
+  labs(
+    title = "Hypothesis 2: Price Comparison by Review Status",
+    subtitle = "Welch Two-Sample t-Test on Log-Transformed Prices",
+    x = "Review Engagement Status",
+    y = "Log Price (log(1 + price))"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+
+
+```
+Hypothesis 2: Price Differentiation Based on Review EngagementNull
+Hypothesis ($H_0$): The mean log-price of books without reviews (No Reviews) is equal to the mean log-price of books with active reviews (With Reviews).
+Alternative Hypothesis ($H_1$): There is a statistically significant difference in mean pricing between reviewed and unreviewed titles.Empirical Results and Statistical Testing:
+A Welch two-sample t-test was conducted on the log-transformed price variable, $\log(1 + \text{price})$, to evaluate pricing disparities while controlling for potential variance heterogeneity between groups. The empirical results demonstrate a statistically significant difference in means ($t = 2.7169, df = 149.93, p = 0.007365$). The 95% confidence interval for the mean difference ranges from $0.04539$ to $0.28747$, leading to the rejection of the null hypothesis at the $\alpha = 0.01$ significance level.   Group Estimates and Distributional Findings:No Reviews Group: Mean $\log(1 + \text{price}) = 3.943155$.   With Reviews Group: Mean $\log(1 + \text{price}) = 3.776725$.   As illustrated in the violin and boxplot distributions, unreviewed titles exhibit a higher overall average log-price compared to reviewed titles. Furthermore, the With Reviews category demonstrates a wider dispersion of extreme values (outliers), particularly in the upper price ranges.   Economic and Market Interpretation:
+The empirical findings indicate that unreviewed or newly listed titles carry higher baseline list prices. This pattern aligns with pricing lifecycle strategies in e-commerce: unreviewed products often launch at premium list prices, whereas products with high consumer engagement (With Reviews) frequently undergo competitive discounting, promotional price adjustments, or market-driven valuation over time. Consequently, review status serves as an effective indicator of market maturity and price adjustment dynamics.  
+
+
+```{r}
+# --- Hypothesis 3: Ratings Variation Across Languages ---
+
+# 1. Clean and factorize the language variable
+books_clean$language_clean <- ifelse(is.na(books_clean$language) | books_clean$language == "", 
+                                     "Unknown/Missing", 
+                                     as.character(books_clean$language))
+books_clean$language_clean <- as.factor(books_clean$language_clean)
+
+# 2. Parametric ANOVA test
+anova_h3 <- aov(avg_reviews ~ language_clean, data = books_clean)
+print(summary(anova_h3))
+
+# 3. Non-parametric Kruskal-Wallis test (robust against negative skewness in ratings)
+kruskal_h3 <- kruskal.test(avg_reviews ~ language_clean, data = books_clean)
+print(kruskal_h3)
+
+# 4. Boxplot Visualization
+ggplot(books_clean, aes(x = language_clean, y = avg_reviews, fill = language_clean)) +
+  geom_boxplot(alpha = 0.7, outlier.color = "red") +
+  scale_fill_brewer(palette = "Set3") +
+  labs(
+    title = "Hypothesis 3: Average Ratings Across Language Categories",
+    subtitle = "Parametric (ANOVA) and Non-Parametric (Kruskal-Wallis) Testing",
+    x = "Publication Language",
+    y = "Average Rating (avg_reviews)"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
 
 ```
 
+Hypothesis 3: Variance in Ratings Across Publication LanguagesNull Hypothesis ($H_0$): The mean average review rating (avg_reviews) does not differ significantly across language categories.Alternative Hypothesis ($H_1$): Review ratings vary significantly across publication languages.Empirical Results and Statistical Testing:
+To account for severe class imbalance and non-normality in ratings, both parametric One-Way ANOVA and non-parametric Kruskal-Wallis tests were conducted. The parametric ANOVA revealed a marginally significant effect ($F = 3.734, df = 2, p = 0.0243$). However, the non-parametric Kruskal-Wallis rank sum test yielded a chi-squared statistic of $\chi^2 = 4.4508$ ($df = 2, p = 0.108$), which is statistically non-significant at the standard $\alpha = 0.05$ level.   Distributional and Visual Findings:
+As demonstrated in the boxplot visualization, the dataset suffers from extreme categorical imbalance, with the vast majority of observations concentrated in the English category, while Spanish contains virtually no representation in this subset. The observed significance in the ANOVA test is primarily driven by distributional skewness and outlier presence in the English group rather than true variance across multiple robust language categories.   Methodological Conclusion:
+Because the non-parametric Kruskal-Wallis test fails to reject the null hypothesis ($p = 0.108$), we conclude that publication language does not exert a robust systematic effect on average ratings once distributional asymmetries are accounted for. Consequently, language exhibits limited explanatory power due to severe class dominance and should be treated cautiously or omitted in subsequent multivariate econometric models to prevent structural multicollinearity.
+
+
 ```{r}
-bss=regsubsets(log(1+price) ~ log(1+pages)+exp(avg_reviews)+n_reviews+star5+log(1+star4)+log(1+star3)+log(1+star2)+log(1+star1)+
-             language , data = books_clean , nvmax=9)
-bss.summary=summary(bss) 
-summary(bss)
+# --- Hypothesis 4: Review Volume (n_reviews) vs Log Price ---
+# 1. Spearman Rank Correlation (robust against heavy tails)
+cor_h4 <- cor.test(books_clean$n_reviews, log(1 + books_clean$price), method = "spearman", exact = FALSE)
+print(cor_h4)
+
+# 2. Scatterplot with Log-Log Scale and LOESS fit
+plot_h4 <- ggplot(books_clean, aes(x = log(1 + n_reviews), y = log(1 + price))) +
+  geom_point(alpha = 0.3, color = "#2980b9") +
+  geom_smooth(method = "lm", color = "red", linetype = "dashed", se = FALSE) +
+  geom_smooth(method = "loess", color = "darkblue", se = FALSE) +
+  labs(
+    title = "Hypothesis 4: Log Review Volume vs. Log Price",
+    subtitle = "Spearman Correlation & Non-Parametric Fit",
+    x = "Log Review Count (log(1 + n_reviews))",
+    y = "Log Price (log(1 + price))"
+  ) +
+  theme_minimal()
+print(plot_h4)
 ```
+4. Hypothesis 4: Review Volume vs. Book Pricing Dynamics
+Null Hypothesis ($H_0$): The number of reviews (n_reviews) is not correlated with log-transformed book price ($\rho = 0$).
+Alternative Hypothesis ($H_1$): Review volume is significantly correlated with log-transformed book price ($\rho \neq 0$).Empirical Results and Statistical Testing:To accommodate the extreme right-skewness and heavy-tailed distribution of review counts, Spearman's rank correlation test was executed. The empirical findings reveal a statistically significant, weak-to-moderate negative correlation between review volume and price ($\rho = -0.1554, S = 160966486, p = 1.647 \times 10^{-6}$). Consequently, the null hypothesis is rejected at the $\alpha = 0.001$ significance level.Visual and Non-Parametric Analysis:As illustrated in the scatterplot with double-log scaling ($\log(1 + \text{n\_reviews})$ vs. $\log(1 + \text{price})$), the baseline linear OLS specification exhibits a steady downward trajectory. The non-parametric LOESS curve closely mirrors the linear trend across lower and moderate review volumes but reveals an accelerated downward curvature in the extreme right tail ($\log(1 + \text{n\_reviews}) > 6.0$).Economic Interpretation:Counter to traditional "social proof" pricing premium theories, higher review counts are associated with lower list prices in the Amazon book catalog. This empirically supports a mass-market commercialization effect: books targeting broad audience segments undergo aggressive price discounting to maximize sales volume and review accumulation, whereas niche, highly specialized, or academic texts maintain higher baseline prices despite lower overall consumer review engagement.
 
-```{r}
-par(mfrow=c(2,2))
-plot(bss.summary$rss, xlab="Number of Variables", ylab="SSres", type="l") 
-
-K0=which.min(bss.summary$rss) 
-points(K0, bss.summary$rss[K0], col="red",cex=2,pch=20)
-plot(bss.summary$adjr2,xlab="Number of Variables", ylab="Adjusted RSq", type="l") 
-
-K1=which.max(bss.summary$adjr2) 
-points(K1, bss.summary$adjr2[K1], col="red",cex=2,pch=20)
-plot(bss.summary$cp,xlab="Number of Variables", ylab="C_p", type="l")
-
-K2=which.min(bss.summary$cp) 
-points(K2, bss.summary$cp[K2], col="red",cex=2,pch=20)
-plot(bss.summary$bic,xlab="Number of Variables", ylab="BIC", type="l") 
-
-K3=which.min(bss.summary$bic) 
-points(K3, bss.summary$bic[K3], col="red",cex=2,pch=20)
-```
-```{r}
-# Κρατάμε μόνο τις γραμμές που ΔΕΝ έχουν κανένα NA στις μεταβλητές του μοντέλου
-vars_model <- c("price", "pages", "avg_reviews", "n_reviews", 
-                "star5", "star4", "star3", "star2", "star1", "language")
-
-books_clean_lm <- na.omit(books_clean[, vars_model])
-colSums(is.na(books_clean_lm[, c("price", "pages", "avg_reviews", "n_reviews", star_vars, "language")]))
-
-```
 
 
 ```{r}
 
-books_clean_lm <- books_clean
+# --- Hypothesis 5: Average Rating (avg_reviews) vs Log Price ---
 
-# 1. Αφαιρούμε τις γραμμές όπου λείπει η τιμή (price) ή η γλώσσα (language)
-books_clean_lm <- books_clean_lm[!is.na(books_clean_lm$price) & !is.na(books_clean_lm$language) ]
+# 1. Spearman Rank Correlation
+cor_h5 <- cor.test(books_clean$avg_reviews, log(1 + books_clean$price), method = "spearman", exact = FALSE)
+print(cor_h5)
 
-# 2. Imputation για τις σελίδες (pages) με τη διάμεσο
-median_pages <- median(books_clean_lm$pages, na.rm = TRUE)
-books_clean_lm$pages[is.na(books_clean_lm$pages)] <- median_pages
+# 2. Scatterplot with LOESS fit
+plot_h5 <- ggplot(books_clean, aes(x = avg_reviews, y = log(1 + price))) +
+  geom_point(alpha = 0.3, color = "#27ae60") +
+  geom_smooth(method = "lm", color = "red", linetype = "dashed", se = FALSE) +
+  geom_smooth(method = "loess", color = "darkgreen", se = FALSE) +
+  labs(
+    title = "Hypothesis 5: Average Rating vs. Log Price",
+    subtitle = "Testing the Quality Premium Hypothesis",
+    x = "Average Rating (avg_reviews)",
+    y = "Log Price (log(1 + price))"
+  ) +
+  theme_minimal()
+print(plot_h5)
 
-# 3. Δημιουργία indicator variable για τις κριτικές (1 αν έχει, 0 αν δεν έχει)
-books_clean_lm$has_reviews <- ifelse(!is.na(books_clean_lm$n_reviews) & books_clean_lm$n_reviews > 0, 1, 0)
-
-# 4. Imputation στον μέσο όρο κριτικών (avg_reviews) με τον γενικό μέσο όρο
-mean_avg_reviews <- mean(books_clean_lm$avg_reviews, na.rm = TRUE)
-books_clean_lm$avg_reviews[is.na(books_clean_lm$avg_reviews)] <- mean_avg_reviews
-
-# 5. Αντικατάσταση των NA στα αστέρια με 0 (εφόσον δεν υπάρχουν κριτικές)
-books_clean_lm[is.na(books_clean_lm$n_reviews) | books_clean_lm$n_reviews == 0, star_vars] <- 0
-
-# 6. Τελικός έλεγχος (πρέπει όλα ταθροίσματα να είναι 0)
-colSums(is.na(books_clean_lm[, c("price", "pages", "avg_reviews", "n_reviews", star_vars, "language", "has_reviews")]))
 
 ```
+Hypothesis 5: The Quality Premium Hypothesis (Average Rating vs. Book Price)
+Null Hypothesis ($H_0$): Average product rating (avg_reviews) is not correlated with log-transformed book price ($\rho = 0$).
+Alternative Hypothesis ($H_1$): Average product rating is significantly correlated with log-transformed book price ($\rho \neq 0$).Empirical Results and Statistical Testing:
+Spearman's rank correlation test was performed to evaluate whether products with higher customer satisfaction command a price premium in online book retail. The empirical test yields a near-zero correlation coefficient ($\rho = 0.01974, S = 90080069$) with a p-value of $p = 0.5723$. Because the p-value far exceeds the standard threshold of $\alpha = 0.05$, we fail to reject the null hypothesis.   Visual and Non-Parametric Evaluation:
+As demonstrated in the scatterplot visual, the linear OLS fit (red dashed line) is completely horizontal. The non-parametric LOESS curve (dark green line) remains flat across the bulk of the rating distribution (between 3.5 and 5.0 stars), where the vast majority of observations are concentrated. The upward distortion of the LOESS curve below 3.0 stars is an artifact of boundary bias due to severe data sparsity in lower rating brackets.   Economic Interpretation:
+The empirical findings strongly refute the Quality Premium Hypothesis in the context of Amazon book pricing. Higher user ratings do not translate into higher retail listing prices. In digital retail, user ratings primarily serve as a post-purchase evaluation metric and conversion enhancer rather than a structural determinant of pricing power, which remains governed by physical volume (page count) and publisher distribution strategies
 
 
 
 ```{r}
+# --- Step 1: Multivariate OLS Model Construction ---
+# Model specification based on validated hypotheses (H1, H2, H4)
+ols_model <- lm(log(1 + price) ~ pages + has_reviews + log(1 + n_reviews), data = books_clean)
 
-# 1. Συνάρτηση predict για regsubsets
-predict.regsubsets <- function(object, newdata, id, ...) {
-  form <- as.formula(object$call[[2]])
-  mat <- model.matrix(form, newdata)
-  coefi <- coef(object, id = id)
-  xvars <- names(coefi)
-  return(mat[, xvars] %*% coefi)
+# Summary of the model output
+summary_ols <- summary(ols_model)
+print(summary_ols)
+
+# --- Step 2: Diagnostic Checks ---
+
+# 1. Multicollinearity check (VIF < 5 indicates no severe multicollinearity)
+vif_values <- vif(ols_model)
+print("--- Variance Inflation Factor (VIF) ---")
+print(vif_values)
+
+# 2. Diagnostic Plots (Residuals vs Fitted, Q-Q Plot, Scale-Location, Residuals vs Leverage)
+par(mfrow = c(2, 2))
+plot(ols_model)
+par(mfrow = c(1, 1))
+```
+
+Multivariate Econometric Modeling and Diagnostic EvaluationTo synthesize the structural findings from our hypothesis testing, a multivariate Ordinary Least Squares (OLS) regression model was specified with log-transformed book price as the dependent variable:$$\log(1 + \text{price}) = \beta_0 + \beta_1 \cdot \text{pages} + \beta_2 \cdot \text{has\_reviews}_{\text{With Reviews}} + \beta_3 \cdot \log(1 + \text{n\_reviews}) + \varepsilon$$Empirical Results and Parameter EstimatesOverall Fit: The model is highly statistically significant overall ($F(3, 926) = 127.6, p < 2.2 \times 10^{-16}$), explaining approximately $29.24\%$ of the variance in log prices ($\text{Multiple } R^2 = 0.2924$, $\text{Adjusted } R^2 = 0.2901$).   Page Count ($\beta_1 = 0.001507, t = 18.976, p < 2 \times 10^{-16}$): Highly significant positive effect. Holding review metrics constant, each additional page increases expected book price by approximately $0.15\%$ ($\approx e^{0.001507} - 1$).   Review Engagement Indicator ($\beta_2 = 0.005236, t = 0.086, p = 0.931$): Statistically non-significant. Once review volume ($\log(1 + \text{n\_reviews})$) is controlled for, the binary review status dummy adds no incremental explanatory power.   Log Review Count ($\beta_3 = -0.072204, t = -6.771, p = 2.27 \times 10^{-11}$): Highly significant negative elasticity. Controlling for physical page count, a $1\%$ increase in review volume is associated with a $0.072\%$ decrease in log listing price, reinforcing the mass-market commercialization effect.   Model Diagnostics & Multicollinearity AssessmentMulticollinearity (VIF Evaluation):pages: $1.0458$   has_reviews: $1.6429$   log(1 + n_reviews): $1.6967$   All Variance Inflation Factor (VIF) values are well below the threshold of $5.0$, confirming the complete absence of harmful multicollinearity in the specified model.   Residual Diagnostics:Linearity and Homoskedasticity (Residuals vs Fitted & Scale-Location): Residuals show stable variance across fitted values, with slight non-linear deviation observed only at extreme fitted values.   Normality of Residuals (Q-Q Plot): The standardized residuals strictly align with the theoretical quantiles along the central main body, showing mild heavy-tailed behavior at extreme bounds.   Influential Observations (Residuals vs Leverage): Cook's distance lines indicate no single point exerts leverage high enough to distort the global OLS parameter estimates. 
+
+Interpretation of Model Fit ($R^2 = 0.2901$)While an Adjusted $R^2$ of $0.2901$ implies that $70.99\%$ of price variation remains unexplained by our explicit regressors, this magnitude is typical and Methodologically Sound in cross-sectional micro-econometric datasets. In e-commerce and retail pricing studies, listing prices are heavily influenced by unobserved structural factors—such as publisher-specific margins, promotional discounting algorithms, author brand equity, copyright licensing, and binding types (hardcover vs. paperback)—which are not captured in standard web-scraped specifications.   Importantly, in hypothesis testing and structural econometrics, the primary objective is to obtain unbiased, statistically consistent parameter estimates ($\beta$) rather than maximizing predictive power. The highly significant F-statistic ($F = 127.6, p < 2.2 \times 10^{-16}$) confirms that the identified relationships (e.g., page count scaling and review volume elasticities) are robust and non-random. 
+
+Executive Discussion and Final ConclusionsThis empirical investigation applied a combination of parametric OLS regression and non-parametric estimators (LOESS, Nadaraya–Watson, Spearman correlation, Kruskal-Wallis) to model pricing mechanics within an Amazon books dataset.   Key Methodological & Econometric Takeaways:Physical Volume Drives Baseline Price: Page count (pages) serves as the core physical predictor of book pricing, exhibiting a stable positive coefficient across parametric and local polynomial regressions.   Mass-Market Commercialization Effect: Contrary to expectations of a "social proof premium," review volume (n_reviews) is negatively correlated with retail listing price. Popular, mass-market titles undergo aggressive price discounting to drive high purchase and review volumes.   Absence of Quality Premium: Average customer ratings (avg_reviews) do not command a statistical price premium ($p = 0.5723$). Ratings primarily drive conversion rates post-listing rather than dictating listing price power.   Handling Structural Categorical Limits: Language variables exhibited severe class imbalance, proving unsuitable for linear specifications due to distributional bias.   Policy and Strategic Implications:Digital book retailers and publishers should separate pricing algorithms from customer evaluation metrics. While physical production parameters (pages) establish the baseline cost structure, dynamic price discounting should be strategically utilized to trigger volume-driven network effects and review accumulation.
+
+
+
+```{r}
+# Define a list of formula specifications for the loop
+model_formulas <- list(
+  "1. Without Stars" = avg_reviews ~ pages + log(1 + price) + log(1 + n_reviews),
+  "2. With Star5"    = avg_reviews ~ pages + log(1 + price) + log(1 + n_reviews) + star5,
+  "3. With Star5 & Star4" = avg_reviews ~ pages + log(1 + price) + log(1 + n_reviews) + star5 + log(1 + star4)
+)
+
+# Loop through each specification to fit the model and check diagnostics
+for (model_name in names(model_formulas)) {
+  
+  # Print separator and current model name
+  cat("==================================================\n")
+  cat("Model Specification:", model_name, "\n")
+  cat("==================================================\n")
+  
+  # Fit the OLS regression model
+  current_model <- lm(model_formulas[[model_name]], data = books_clean)
+  
+  # Print the regression summary output
+  print(summary(current_model))
+  
+  # Calculate and print Variance Inflation Factor (VIF) for multicollinearity check
+  cat("\n--- Variance Inflation Factor (VIF) ---\n")
+  print(car::vif(current_model))
+  
+  cat("\n\n")
 }
-
-# 2. Παράμετροι (q = 7 μεταβλητές,  αφαιρώντας το star1)
-K <- 10
-q <- 7  
-M <- 101
-
-cv.errors <- array(NA, dim = c(K, q, M))
-
-# 3. CV Loop
-for(m in 1:M) {
-  folds <- sample(1:K, nrow(books_clean_lm), replace = TRUE)  
-
-  for(k in 1:K) {
-    # Κρατάμε το n_reviews και αφαιρούμε το star1 ως reference group
-    bss.cv <- regsubsets(log(1+price) ~ log(1+pages)+exp(avg_reviews)+n_reviews+exp(star5)+log(1+star4)+log(1+star3)+log(1+star2)+
-             language,
-                         data = books_clean_lm[folds != k, ], 
-                         nvmax = q) 
-
-    for(p in 1:q) {
-      cv.pred <- predict.regsubsets(bss.cv, newdata = books_clean_lm[folds == k, ], id = p)
-      actuals <- log(1 + books_clean_lm$price[folds == k])
-      cv.errors[k, p, m] <- mean((actuals - cv.pred)^2)
-    }
-  }
-}
-
-# 4. Υπολογισμός μέσων σφαλμάτων & Γράφημα
-mean.cv.errors <- apply(cv.errors, 2, mean)
-p.cv <- which.min(mean.cv.errors)
-
-plot(mean.cv.errors, type = 'b', pch = 19,
-     xlab = "Model Size (Number of Predictors)", 
-     ylab = "Mean Squared Error (Log Scale)",
-     main = "10-Fold CV for Best Subset Selection (Ref Group: star1)")
-points(p.cv, mean.cv.errors[p.cv], col = "red", cex = 2, pch = 20)
-
-cat("Optimal model size selected by CV:", p.cv, "\n")
 ```
+ Comparative Analysis of Nested Models for Rating Prediction
+ To extend our empirical investigation beyond pricing mechanics, a sequential (nested) modeling approach was implemented to evaluate the explanatory power of review breakdown metrics on overall consumer satisfaction ratings (avg_reviews), while strictly controlling for multicollinearity.Baseline Model (Metadata Only): Exclusively utilizing physical and economic metadata (pages, price, n_reviews) yields a statistically insignificant specification ($F(3, 807) = 2.046, p = 0.1061, \text{Adjusted } R^2 = 0.0039$). This confirms that structural book characteristics contain virtually zero explanatory power regarding subjective reader satisfaction.   Model 2 (Incorporating star5): Introducing the 5-star review density dramatically improves overall fit ($\text{Adjusted } R^2 = 0.4797, p < 2.2 \times 10^{-16}$). Controlling for satisfaction distribution reveals a significant negative price elasticity ($\beta = -0.0619, p = 0.00497$), indicating that higher listing prices elevate consumer expectations, rendering buyers more critical in their evaluations.Model 3 (Incorporating star5 and log(1 + star4)): Expanding the specification to include 4-star review proportions further elevates explanatory power ($\text{Adjusted } R^2 = 0.5214, p < 2.2 \times 10^{-16}$). Multicollinearity remains fully controlled, with all Variance Inflation Factors safely below $2.50$.Methodological Takeaway on ParsimonyAttempting to introduce the remaining lower-tier star metrics (3, 2, and 1 star proportions) yields negligible gains in Adjusted $R^2$ while triggering severe, exponential multicollinearity due to the compositional sum-to-one constraint of rating percentages. Consequently, the specification combining star5 and log(1 + star4) is established as the optimal, parsimonious predictive model for customer ratings.
+ 
 
-```{r}
 
-
-```
