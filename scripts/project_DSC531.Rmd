@@ -346,12 +346,25 @@ pairs(books_numeric,
 
 
 ```{r}
-# 1. CONTINUOUS VARIABLES (Histograms & Density Plots)
-# We loop through all numeric columns to create distribution plots
+# 1. Καθαρισμός graphics devices
+graphics.off()
 
+# 2. Ορισμός της ακριβούς επιθυμητής διαδρομής για τα plots
+plots_dir <- "C:/Users/mmari/OneDrive/Υπολογιστής/DSC531/DSC-531-AMAZON-BOOKS-DATASET/plots"
+
+# 3. Δημιουργία του φακέλου αν δεν υπάρχει ήδη
+if (!dir.exists(plots_dir)) {
+  dir.create(plots_dir, recursive = TRUE)
+}
+
+# 4. Loop για τη δημιουργία και αποθήκευση των γραφημάτων
 numeric_vars <- names(books_clean %>% select(where(is.numeric)))
 
 for (v in numeric_vars) {
+  
+  safe_v_name <- gsub("[^A-Za-z0-9_]", "_", v)
+  file_path <- file.path(plots_dir, paste0("distribution_", safe_v_name, ".png"))
+  
   p <- ggplot(books_clean, aes_string(x = v)) +
     geom_histogram(aes(y = ..density..), bins = 60, fill = "steelblue", color = "white", alpha = 0.7) +
     geom_density(color = "darkred", size = 1) +
@@ -361,9 +374,73 @@ for (v in numeric_vars) {
     theme_minimal() +
     theme(plot.title = element_text(face = "bold", size = 14))
   
-  print(p)
+  ggsave(
+    filename = file_path,
+    plot = p,
+    width = 8,
+    height = 6,
+    units = "in",
+    dpi = 150
+  )
 }
+
+# 5. Επιβεβαίωση στην κονσόλα
+cat("\n Τα γραφήματα αποθηκεύτηκαν επιτυχώς στον φάκελο:\n", plots_dir, "\n")
 ```
+
+
+```{r}
+# 1. Καθαρισμός graphics devices
+graphics.off()
+
+# 2. Ορισμός της διαδρομής αποθήκευσης
+plots_dir <- "C:/Users/mmari/OneDrive/Υπολογιστής/DSC531/DSC-531-AMAZON-BOOKS-DATASET/plots"
+
+if (!dir.exists(plots_dir)) {
+  dir.create(plots_dir, recursive = TRUE)
+}
+
+# 3. Επιλογή μόνο των μεταβλητών star1 έως star5 και μετατροπή σε long format
+stars_long <- books_clean %>%
+  select(matches("^star[1-5]$")) %>%
+  pivot_longer(cols = everything(), names_to = "variable", values_to = "value")
+
+# 4. Δημιουργία του faceted ιστογράμματος με γραμμή κατανομής (density)
+p <- ggplot(stars_long, aes(x = value, fill = variable)) +
+  geom_histogram(aes(y = ..density..), bins = 30, color = "white", alpha = 0.7) +
+  geom_density(color = "darkred", size = 1) +
+  facet_wrap(~ variable, scales = "free") +
+  labs(
+    title = "Histograms and Density Curves of Star Ratings (star1 to star5)",
+    subtitle = "Checking distribution, frequency, and kernel density",
+    x = "Value",
+    y = "Density"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    strip.text = element_text(face = "bold", size = 11),
+    plot.title = element_text(face = "bold", size = 14)
+  )
+
+# 5. Αποθήκευση με τη χρήση της ggsave()
+file_path <- file.path(plots_dir, "star_variables_histograms_density.png")
+
+ggsave(
+  filename = file_path,
+  plot = p,
+  width = 10,
+  height = 8,
+  units = "in",
+  dpi = 150
+)
+
+# 6. Επιβεβαίωση στην κονσόλα
+cat("\n Το γράφημα ιστογραμμάτων με τη γραμμή κατανομής αποθηκεύτηκε επιτυχώς στον φάκελο:\n", plots_dir, "\n")
+
+```
+
+
 Distribution of Book Prices (Histogram and Kernel Density Estimate)
 
 The distribution of book prices (price) exhibits a prominent positive (right) skewness with a long right tail. The vast majority of titles are heavily concentrated at the lower end of the pricing spectrum, featuring a sharp density peak clustered roughly between 30 and 50. Conversely, a small minority of specialized or premium books extend far to the right, with prices reaching up to 200 and beyond.
@@ -408,13 +485,23 @@ hist(log(1 + books_clean$price), main="Κατανομή Log(1 + Price)", xlab="L
 
 
 ```{r}
-# 1. Select numeric variables and convert to long format for faceted plotting
+# 1. Καθαρισμός graphics devices
+graphics.off()
+
+# 2. Ορισμός της διαδρομής αποθήκευσης
+plots_dir <- "C:/Users/mmari/OneDrive/Υπολογιστής/DSC531/DSC-531-AMAZON-BOOKS-DATASET/plots"
+
+if (!dir.exists(plots_dir)) {
+  dir.create(plots_dir, recursive = TRUE)
+}
+
+# 3. Select numeric variables and convert to long format for faceted plotting
 books_long <- books_clean %>%
   select(where(is.numeric)) %>%
   pivot_longer(cols = everything(), names_to = "variable", values_to = "value")
 
-# 2. Create a single faceted box plot for all numeric variables
-ggplot(books_long, aes(x = variable, y = value, fill = variable)) +
+# 4. Create a single faceted box plot for all numeric variables
+p <- ggplot(books_long, aes(x = variable, y = value, fill = variable)) +
   geom_boxplot(alpha = 0.7, outlier.color = "red", outlier.shape = 16) +
   facet_wrap(~ variable, scales = "free") +
   labs(
@@ -432,16 +519,42 @@ ggplot(books_long, aes(x = variable, y = value, fill = variable)) +
     plot.title = element_text(face = "bold", size = 14)
   )
 
+# 5. Αποθήκευση με τη χρήση της ggsave()
+file_path <- file.path(plots_dir, "all_numeric_boxplots.png")
+
+ggsave(
+  filename = file_path,
+  plot = p,
+  width = 10,
+  height = 8,
+  units = "in",
+  dpi = 150
+)
+
+# 6. Επιβεβαίωση στην κονσόλα
+cat("\n Το γράφημα boxplots αποθηκεύτηκε επιτυχώς στον φάκελο:\n", plots_dir, "\n")
+
 ```
 
 
 ```{r}
-# 2. CATEGORICAL VARIABLES (Bar Charts)
-# For variables like 'language' or any other categorical column
+graphics.off()
+plots_dir <- "C:/Users/mmari/OneDrive/Υπολογιστής/DSC531/DSC-531-AMAZON-BOOKS-DATASET/plots"
 
+if (!dir.exists(plots_dir)) {
+  dir.create(plots_dir, recursive = TRUE)
+}
+
+# 3. 2. CATEGORICAL VARIABLES (Bar Charts)
 categorical_vars <- names(books_clean %>% select(where(~ !is.numeric(.))))
 
 for (v in categorical_vars) {
+  
+  # safe file name
+  safe_v_name <- gsub("[^A-Za-z0-9_]", "_", v)
+  file_path <- file.path(plots_dir, paste0("categorical_bar_", safe_v_name, ".png"))
+  
+  # create plot
   p <- ggplot(books_clean, aes_string(x = v)) +
     geom_bar(fill = "forestgreen", color = "black", alpha = 0.7) +
     labs(title = paste("Frequency Count of", v),
@@ -451,9 +564,18 @@ for (v in categorical_vars) {
     theme(axis.text.x = element_text(angle = 45, hjust = 1),
           plot.title = element_text(face = "bold", size = 14))
   
-  print(p)
+  # save using ggsave()
+  ggsave(
+    filename = file_path,
+    plot = p,
+    width = 10,
+    height = 6,
+    units = "in",
+    dpi = 150
+  )
 }
 
+cat("\n Όλα τα κατηγορικά ραβδογράμματα αποθηκεύτηκαν επιτυχώς στον φάκελο:\n", plots_dir, "\n")
 ```
 Frequency Count and Categorical Breakdown of Book Language (language)
 The categorical frequency breakdown of the language variable demonstrates an overwhelming predominance of English-language titles within the dataset. Specifically, the vast majority of observations are classified under English, with a count approaching the total sample size. Conversely, other categories—such as Spanish and missing values (NA)—exhibit negligible frequencies, remaining near zero.   Economic and Methodological Interpretation:This extreme class imbalance indicates that the dataset is structurally skewed toward the English-speaking publishing market. From a methodological standpoint, such severe sparsity in alternative language categories implies that language functions nearly as a constant, providing insufficient cross-group variation for robust comparative econometric modeling. Consequently, including it as an active predictor in subsequent regressions may yield uninformative or unstable coefficients, justifying its careful evaluation or potential omission during model specification
@@ -463,6 +585,16 @@ The categorical frequency breakdown of the language variable demonstrates an ove
 Hypothesis Testing and Empirical FindingsTo formally evaluate the underlying relationships and market dynamics prior to econometric modeling, three primary statistical hypotheses were formulated and tested.1. Hypothesis 1: The Effect of Page Count on Book PriceNull Hypothesis ($H_0$): There is no correlation between the number of pages (pages) and the log-transformed book price ($\beta = 0$).Alternative Hypothesis ($H_1$): Book page count is significantly correlated with price ($\beta \neq 0$).Empirical Result: The Pearson correlation test revealed a statistically significant positive relationship between page count and $\log(1 + \text{price})$.Interpretation: This confirms that physical volume (scaling of material and production costs) exerts a tangible upward pressure on retail pricing, validating the inclusion of pages as a core structural predictor in subsequent modeling.
 
 ```{r}
+# 1. Καθαρισμός graphics devices
+graphics.off()
+
+# 2. Ορισμός της διαδρομής αποθήκευσης
+plots_dir <- "C:/Users/mmari/OneDrive/Υπολογιστής/DSC531/DSC-531-AMAZON-BOOKS-DATASET/plots"
+
+if (!dir.exists(plots_dir)) {
+  dir.create(plots_dir, recursive = TRUE)
+}
+
 # --- Hypothesis 1: Price vs Page Count (OLS vs. LOESS vs. Nadaraya-Watson) ---
 
 # 1. Perform Pearson correlation test to evaluate linear association
@@ -470,7 +602,7 @@ cor_test_h1 <- cor.test(books_clean$pages, log(1 + books_clean$price), method = 
 print(cor_test_h1)
 
 # 2. Visualize the models using ggplot2 (handling missing values on-the-fly)
-ggplot(books_clean, aes(x = pages, y = log(1 + price))) +
+p <- ggplot(books_clean, aes(x = pages, y = log(1 + price))) +
   # Scatterplot representing individual book observations
   geom_point(alpha = 0.3, color = "#2c3e50") +
   
@@ -502,6 +634,20 @@ ggplot(books_clean, aes(x = pages, y = log(1 + price))) +
   ) +
   theme_minimal()
 
+# 3. Αποθήκευση με τη χρήση της ggsave()
+file_path <- file.path(plots_dir, "hypothesis_1_price_pages.png")
+
+ggsave(
+  filename = file_path,
+  plot = p,
+  width = 10,
+  height = 7,
+  units = "in",
+  dpi = 150
+)
+
+# 4. Επιβεβαίωση στην κονσόλα
+cat("\n Το γράφημα της Υπόθεσης 1 αποθηκεύτηκε επιτυχώς στον φάκελο:\n", plots_dir, "\n")
 ```
 
 Hypothesis 1: The Effect of Page Count on Book Price and Non-Parametric Modeling
@@ -512,6 +658,16 @@ Evaluating the comparative estimator graph (OLS linear vs. LOESS vs. Nadaraya–
 The empirical evidence confirms that physical volume (scaling of material and production costs) exerts a tangible upward pressure on retail pricing, validating pages as a core structural predictor while robustly controlling for non-linearities and boundary constraints.
 
 ```{r}
+# 1. Καθαρισμός graphics devices
+graphics.off()
+
+# 2. Ορισμός της διαδρομής αποθήκευσης
+plots_dir <- "C:/Users/mmari/OneDrive/Υπολογιστής/DSC531/DSC-531-AMAZON-BOOKS-DATASET/plots"
+
+if (!dir.exists(plots_dir)) {
+  dir.create(plots_dir, recursive = TRUE)
+}
+
 # --- Hypothesis 2: Price Differentiation by Review Engagement ---
 
 # 1. Create a binary engagement variable based on review counts
@@ -524,7 +680,7 @@ t_test_h2 <- t.test(log(1 + price) ~ has_reviews, data = books_clean)
 print(t_test_h2)
 
 # 3. Visualize the price distribution across review status (Boxplot & Violin plot)
-ggplot(books_clean, aes(x = has_reviews, y = log(1 + price), fill = has_reviews)) +
+p <- ggplot(books_clean, aes(x = has_reviews, y = log(1 + price), fill = has_reviews)) +
   geom_violin(alpha = 0.3, trim = FALSE) +
   geom_boxplot(width = 0.2, outlier.color = "red", alpha = 0.7) +
   scale_fill_manual(values = c("No Reviews" = "#e74c3c", "With Reviews" = "#2ecc71")) +
@@ -537,6 +693,20 @@ ggplot(books_clean, aes(x = has_reviews, y = log(1 + price), fill = has_reviews)
   theme_minimal() +
   theme(legend.position = "none")
 
+# 4. Αποθήκευση με τη χρήση της ggsave()
+file_path <- file.path(plots_dir, "hypothesis_2_price_reviews.png")
+
+ggsave(
+  filename = file_path,
+  plot = p,
+  width = 10,
+  height = 7,
+  units = "in",
+  dpi = 150
+)
+
+# 5. Επιβεβαίωση στην κονσόλα
+cat("\n Το γράφημα της Υπόθεσης 2 αποθηκεύτηκε επιτυχώς στον φάκελο:\n", plots_dir, "\n")
 
 
 ```
@@ -548,6 +718,16 @@ The empirical findings indicate that unreviewed or newly listed titles carry hig
 
 
 ```{r}
+# 1. Καθαρισμός graphics devices
+graphics.off()
+
+# 2. Ορισμός της διαδρομής αποθήκευσης
+plots_dir <- "C:/Users/mmari/OneDrive/Υπολογιστής/DSC531/DSC-531-AMAZON-BOOKS-DATASET/plots"
+
+if (!dir.exists(plots_dir)) {
+  dir.create(plots_dir, recursive = TRUE)
+}
+
 # --- Hypothesis 3: Ratings Variation Across Languages ---
 
 # 1. Clean and factorize the language variable
@@ -565,7 +745,7 @@ kruskal_h3 <- kruskal.test(avg_reviews ~ language_clean, data = books_clean)
 print(kruskal_h3)
 
 # 4. Boxplot Visualization
-ggplot(books_clean, aes(x = language_clean, y = avg_reviews, fill = language_clean)) +
+p <- ggplot(books_clean, aes(x = language_clean, y = avg_reviews, fill = language_clean)) +
   geom_boxplot(alpha = 0.7, outlier.color = "red") +
   scale_fill_brewer(palette = "Set3") +
   labs(
@@ -575,7 +755,25 @@ ggplot(books_clean, aes(x = language_clean, y = avg_reviews, fill = language_cle
     y = "Average Rating (avg_reviews)"
   ) +
   theme_minimal() +
-  theme(legend.position = "none")
+  theme(
+    legend.position = "none",
+    axis.text.x = element_text(angle = 45, hjust = 1) # Βελτιώνει την εμφάνιση αν υπάρχουν πολλές γλώσσες
+  )
+
+# 5. Αποθήκευση με τη χρήση της ggsave()
+file_path <- file.path(plots_dir, "hypothesis_3_ratings_languages.png")
+
+ggsave(
+  filename = file_path,
+  plot = p,
+  width = 10,
+  height = 7,
+  units = "in",
+  dpi = 150
+)
+
+# 6. Επιβεβαίωση στην κονσόλα
+cat("\n Το γράφημα της Υπόθεσης 3 αποθηκεύτηκε επιτυχώς στον φάκελο:\n", plots_dir, "\n")
 
 ```
 
@@ -586,13 +784,23 @@ Because the non-parametric Kruskal-Wallis test fails to reject the null hypothes
 
 
 ```{r}
+# 1. Καθαρισμός graphics devices
+graphics.off()
+
+# 2. Ορισμός της διαδρομής αποθήκευσης
+plots_dir <- "C:/Users/mmari/OneDrive/Υπολογιστής/DSC531/DSC-531-AMAZON-BOOKS-DATASET/plots"
+
+if (!dir.exists(plots_dir)) {
+  dir.create(plots_dir, recursive = TRUE)
+}
+
 # --- Hypothesis 4: Review Volume (n_reviews) vs Log Price ---
 # 1. Spearman Rank Correlation (robust against heavy tails)
 cor_h4 <- cor.test(books_clean$n_reviews, log(1 + books_clean$price), method = "spearman", exact = FALSE)
 print(cor_h4)
 
 # 2. Scatterplot with Log-Log Scale and LOESS fit
-plot_h4 <- ggplot(books_clean, aes(x = log(1 + n_reviews), y = log(1 + price))) +
+p <- ggplot(books_clean, aes(x = log(1 + n_reviews), y = log(1 + price))) +
   geom_point(alpha = 0.3, color = "#2980b9") +
   geom_smooth(method = "lm", color = "red", linetype = "dashed", se = FALSE) +
   geom_smooth(method = "loess", color = "darkblue", se = FALSE) +
@@ -603,7 +811,21 @@ plot_h4 <- ggplot(books_clean, aes(x = log(1 + n_reviews), y = log(1 + price))) 
     y = "Log Price (log(1 + price))"
   ) +
   theme_minimal()
-print(plot_h4)
+
+# 3. Αποθήκευση με τη χρήση της ggsave()
+file_path <- file.path(plots_dir, "hypothesis_4_reviews_price.png")
+
+ggsave(
+  filename = file_path,
+  plot = p,
+  width = 10,
+  height = 7,
+  units = "in",
+  dpi = 150
+)
+
+# 4. Επιβεβαίωση στην κονσόλα
+cat("\n Το γράφημα της Υπόθεσης 4 αποθηκεύτηκε επιτυχώς στον φάκελο:\n", plots_dir, "\n")
 ```
 4. Hypothesis 4: Review Volume vs. Book Pricing Dynamics
 Null Hypothesis ($H_0$): The number of reviews (n_reviews) is not correlated with log-transformed book price ($\rho = 0$).
@@ -612,6 +834,15 @@ Alternative Hypothesis ($H_1$): Review volume is significantly correlated with l
 
 
 ```{r}
+# 1. Καθαρισμός graphics devices
+graphics.off()
+
+# 2. Ορισμός της διαδρομής αποθήκευσης
+plots_dir <- "C:/Users/mmari/OneDrive/Υπολογιστής/DSC531/DSC-531-AMAZON-BOOKS-DATASET/plots"
+
+if (!dir.exists(plots_dir)) {
+  dir.create(plots_dir, recursive = TRUE)
+}
 
 # --- Hypothesis 5: Average Rating (avg_reviews) vs Log Price ---
 
@@ -620,7 +851,7 @@ cor_h5 <- cor.test(books_clean$avg_reviews, log(1 + books_clean$price), method =
 print(cor_h5)
 
 # 2. Scatterplot with LOESS fit
-plot_h5 <- ggplot(books_clean, aes(x = avg_reviews, y = log(1 + price))) +
+p <- ggplot(books_clean, aes(x = avg_reviews, y = log(1 + price))) +
   geom_point(alpha = 0.3, color = "#27ae60") +
   geom_smooth(method = "lm", color = "red", linetype = "dashed", se = FALSE) +
   geom_smooth(method = "loess", color = "darkgreen", se = FALSE) +
@@ -631,9 +862,21 @@ plot_h5 <- ggplot(books_clean, aes(x = avg_reviews, y = log(1 + price))) +
     y = "Log Price (log(1 + price))"
   ) +
   theme_minimal()
-print(plot_h5)
 
+# 3. Αποθήκευση με τη χρήση της ggsave()
+file_path <- file.path(plots_dir, "hypothesis_5_rating_price.png")
 
+ggsave(
+  filename = file_path,
+  plot = p,
+  width = 10,
+  height = 7,
+  units = "in",
+  dpi = 150
+)
+
+# 4. Επιβεβαίωση στην κονσόλα
+cat("\n Το γράφημα της Υπόθεσης 5 αποθηκεύτηκε επιτυχώς στον φάκελο:\n", plots_dir, "\n")
 ```
 Hypothesis 5: The Quality Premium Hypothesis (Average Rating vs. Book Price)
 Null Hypothesis ($H_0$): Average product rating (avg_reviews) is not correlated with log-transformed book price ($\rho = 0$).
@@ -645,6 +888,16 @@ The empirical findings strongly refute the Quality Premium Hypothesis in the con
 
 
 ```{r}
+# 1. Καθαρισμός graphics devices
+graphics.off()
+
+# 2. Ορισμός της διαδρομής αποθήκευσης
+plots_dir <- "C:/Users/mmari/OneDrive/Υπολογιστής/DSC531/DSC-531-AMAZON-BOOKS-DATASET/plots"
+
+if (!dir.exists(plots_dir)) {
+  dir.create(plots_dir, recursive = TRUE)
+}
+
 # --- Step 1: Multivariate OLS Model Construction ---
 # Model specification based on validated hypotheses (H1, H2, H4)
 ols_model <- lm(log(1 + price) ~ pages + has_reviews + log(1 + n_reviews), data = books_clean)
@@ -656,14 +909,28 @@ print(summary_ols)
 # --- Step 2: Diagnostic Checks ---
 
 # 1. Multicollinearity check (VIF < 5 indicates no severe multicollinearity)
+# (Απαιτείται η βιβλιοθήκη car: library(car))
+if (!requireNamespace("car", quietly = TRUE)) {
+  install.packages("car")
+}
+library(car)
+
 vif_values <- vif(ols_model)
 print("--- Variance Inflation Factor (VIF) ---")
 print(vif_values)
 
 # 2. Diagnostic Plots (Residuals vs Fitted, Q-Q Plot, Scale-Location, Residuals vs Leverage)
+# Αποθήκευση των διαγνωστικών γραφημάτων σε PNG με σταθερές διαστάσεις (10x8 inches, 150 DPI)
+file_path_diag <- file.path(plots_dir, "ols_model_diagnostics.png")
+
+png(filename = file_path_diag, width = 10, height = 8, units = "in", res = 150)
 par(mfrow = c(2, 2))
 plot(ols_model)
 par(mfrow = c(1, 1))
+dev.off()
+
+# 3. Επιβεβαίωση στην κονσόλα
+cat("\n Τα διαγνωστικά γραφήματα του OLS μοντέλου αποθηκεύτηκαν επιτυχώς στον φάκελο:\n", plots_dir, "\n")
 ```
 
 Multivariate Econometric Modeling and Diagnostic EvaluationTo synthesize the structural findings from our hypothesis testing, a multivariate Ordinary Least Squares (OLS) regression model was specified with log-transformed book price as the dependent variable:$$\log(1 + \text{price}) = \beta_0 + \beta_1 \cdot \text{pages} + \beta_2 \cdot \text{has\_reviews}_{\text{With Reviews}} + \beta_3 \cdot \log(1 + \text{n\_reviews}) + \varepsilon$$Empirical Results and Parameter EstimatesOverall Fit: The model is highly statistically significant overall ($F(3, 926) = 127.6, p < 2.2 \times 10^{-16}$), explaining approximately $29.24\%$ of the variance in log prices ($\text{Multiple } R^2 = 0.2924$, $\text{Adjusted } R^2 = 0.2901$).   Page Count ($\beta_1 = 0.001507, t = 18.976, p < 2 \times 10^{-16}$): Highly significant positive effect. Holding review metrics constant, each additional page increases expected book price by approximately $0.15\%$ ($\approx e^{0.001507} - 1$).   Review Engagement Indicator ($\beta_2 = 0.005236, t = 0.086, p = 0.931$): Statistically non-significant. Once review volume ($\log(1 + \text{n\_reviews})$) is controlled for, the binary review status dummy adds no incremental explanatory power.   Log Review Count ($\beta_3 = -0.072204, t = -6.771, p = 2.27 \times 10^{-11}$): Highly significant negative elasticity. Controlling for physical page count, a $1\%$ increase in review volume is associated with a $0.072\%$ decrease in log listing price, reinforcing the mass-market commercialization effect.   Model Diagnostics & Multicollinearity AssessmentMulticollinearity (VIF Evaluation):pages: $1.0458$   has_reviews: $1.6429$   log(1 + n_reviews): $1.6967$   All Variance Inflation Factor (VIF) values are well below the threshold of $5.0$, confirming the complete absence of harmful multicollinearity in the specified model.   Residual Diagnostics:Linearity and Homoskedasticity (Residuals vs Fitted & Scale-Location): Residuals show stable variance across fitted values, with slight non-linear deviation observed only at extreme fitted values.   Normality of Residuals (Q-Q Plot): The standardized residuals strictly align with the theoretical quantiles along the central main body, showing mild heavy-tailed behavior at extreme bounds.   Influential Observations (Residuals vs Leverage): Cook's distance lines indicate no single point exerts leverage high enough to distort the global OLS parameter estimates. 
