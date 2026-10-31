@@ -1,4 +1,5 @@
 #Plotting the histograms for understanding the variability of the data
+png(filename="histograms_for_the_variability_of_data.png", width=1600, height=1200, res=180)
 par(mfrow = c(3, 2))
 hist(books_clean$price, main = "Distribution of Price", xlab = "Price", col = "skyblue")
 hist(books_clean$pages, main = "Distribution of Pages", xlab = "Pages", col = "lightgreen")
