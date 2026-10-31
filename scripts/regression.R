@@ -13,6 +13,8 @@ books_clean$log_n_reviews <- log(books_clean$n_reviews + 1)
 books_clean$log_weight    <- log(books_clean$weight_kg + 1)
 
 #Plot the variables against avg_reviews
+png("scatterplots_original.png",
+    width = 1600, height = 1200, res = 180)
 par(mfrow = c(2, 2))
 plot(books_clean$price, books_clean$avg_reviews,
      xlab = "Price", ylab = "avg_reviews",
@@ -26,9 +28,13 @@ plot(books_clean$n_reviews, books_clean$avg_reviews,
 plot(books_clean$weight_kg, books_clean$avg_reviews,
      xlab = "Weight", ylab = "avg_reviews",
      main = "Weight vs Avg Reviews", col = "darkblue", pch = 16, cex = 0.6)
+dev.off()
 par(mfrow = c(1,1))
 
+
 #Plot the log-transformed variables against avg_reviews for comparison
+png("scatterplots_log_transformed.png",
+    width = 1600, height = 1200, res = 180)
 par(mfrow = c(2, 2))
 plot(books_clean$log_price, books_clean$avg_reviews,
      xlab = "Log(Price + 1)", ylab = "avg_reviews",
@@ -42,7 +48,9 @@ plot(books_clean$log_n_reviews, books_clean$avg_reviews,
 plot(books_clean$log_weight, books_clean$avg_reviews,
      xlab = "Log(Weight + 1)", ylab = "avg_reviews",
      main = "Log Weight vs Avg Reviews", col = "darkblue", pch = 16, cex = 0.6)
-par(mfrow = c(1,1))
+dev.off()
+par(mfrow = c(1, 1))
+
 
 library(corrplot)
 #Select only numeric columns for correlation
