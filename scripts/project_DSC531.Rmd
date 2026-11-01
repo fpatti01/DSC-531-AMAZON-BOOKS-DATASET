@@ -469,7 +469,56 @@ ggsave(
 cat("\n Το γράφημα ιστογραμμάτων με τη γραμμή κατανομής αποθηκεύτηκε επιτυχώς στον φάκελο:\n", plots_dir, "\n")
 
 ```
+```{r}
+# 1. Καθαρισμός graphics devices
+graphics.off()
 
+# 2. Ορισμός της διαδρομής αποθήκευσης
+plots_dir <- "C:/Users/mmari/OneDrive/Υπολογιστής/DSC531/DSC-531-AMAZON-BOOKS-DATASET/plots"
+
+if (!dir.exists(plots_dir)) {
+  dir.create(plots_dir, recursive = TRUE)
+}
+
+# 3. Επιλογή των συγκεκριμένων μεταβλητών και μετατροπή σε long format
+numeric_subset_long <- books_clean %>%
+  select(pages, price, avg_reviews, n_reviews) %>%
+  pivot_longer(cols = everything(), names_to = "variable", values_to = "value")
+
+# 4. Δημιουργία του faceted ιστογράμματος με γραμμή κατανομής (density)
+p <- ggplot(numeric_subset_long, aes(x = value, fill = variable)) +
+  geom_histogram(aes(y = ..density..), bins = 40, color = "white", alpha = 0.7) +
+  geom_density(color = "darkred", linewidth = 1) +
+  facet_wrap(~ variable, scales = "free") +
+  labs(
+    title = "Histograms and Density Curves of Key Numeric Variables",
+    subtitle = "Faceted distribution check for pages, price, avg_reviews, and n_reviews",
+    x = "Value",
+    y = "Density"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    strip.text = element_text(face = "bold", size = 11),
+    plot.title = element_text(face = "bold", size = 14)
+  )
+
+# 5. Αποθήκευση με τη χρήση της ggsave()
+file_path <- file.path(plots_dir, "key_numeric_variables_histograms_density.png")
+
+ggsave(
+  filename = file_path,
+  plot = p,
+  width = 11,
+  height = 8,
+  units = "in",
+  dpi = 150
+)
+
+# 6. Επιβεβαίωση στην κονσόλα
+cat("\n Το γράφημα faceted ιστογραμμάτων για τις βασικές μεταβλητές αποθηκεύτηκε επιτυχώς στον φάκελο:\n", plots_dir, "\n")
+
+```
 
 Distribution of Book Prices (Histogram and Kernel Density Estimate)
 
@@ -1003,5 +1052,39 @@ for (model_name in names(model_formulas)) {
  Comparative Analysis of Nested Models for Rating Prediction
  To extend our empirical investigation beyond pricing mechanics, a sequential (nested) modeling approach was implemented to evaluate the explanatory power of review breakdown metrics on overall consumer satisfaction ratings (avg_reviews), while strictly controlling for multicollinearity.Baseline Model (Metadata Only): Exclusively utilizing physical and economic metadata (pages, price, n_reviews) yields a statistically insignificant specification ($F(3, 807) = 2.046, p = 0.1061, \text{Adjusted } R^2 = 0.0039$). This confirms that structural book characteristics contain virtually zero explanatory power regarding subjective reader satisfaction.   Model 2 (Incorporating star5): Introducing the 5-star review density dramatically improves overall fit ($\text{Adjusted } R^2 = 0.4797, p < 2.2 \times 10^{-16}$). Controlling for satisfaction distribution reveals a significant negative price elasticity ($\beta = -0.0619, p = 0.00497$), indicating that higher listing prices elevate consumer expectations, rendering buyers more critical in their evaluations.Model 3 (Incorporating star5 and log(1 + star4)): Expanding the specification to include 4-star review proportions further elevates explanatory power ($\text{Adjusted } R^2 = 0.5214, p < 2.2 \times 10^{-16}$). Multicollinearity remains fully controlled, with all Variance Inflation Factors safely below $2.50$.Methodological Takeaway on ParsimonyAttempting to introduce the remaining lower-tier star metrics (3, 2, and 1 star proportions) yields negligible gains in Adjusted $R^2$ while triggering severe, exponential multicollinearity due to the compositional sum-to-one constraint of rating percentages. Consequently, the specification combining star5 and log(1 + star4) is established as the optimal, parsimonious predictive model for customer ratings.
  
+```{r}
 
+# 1. Calculate VIF values from your fitted OLS model
+vif_vals <- vif(ols_model)
+
+# 2. Convert the VIF vector into a clean data frame for ggplot
+vif_df <- data.frame(
+  Variable = names(vif_vals),
+  VIF = as.numeric(vif_vals)
+)
+
+# 3. Create the VIF bar chart using ggplot2
+p_vif <- ggplot(vif_df, aes(x = reorder(Variable, VIF), y = VIF, fill = VIF)) +
+  geom_col(width = 0.6, alpha = 0.8, color = "black") +
+  # Add a horizontal dashed line representing the critical threshold (e.g., 5.0)
+  geom_hline(yintercept = 5.0, color = "red", linetype = "dashed", linewidth = 1) +
+  coord_flip() + # Makes it a horizontal bar chart for clean label reading
+  labs(
+    title = "Variance Inflation Factor (VIF) Diagnostics",
+    subtitle = "Checking for Multicollinearity (Threshold = 5.0)",
+    x = "Predictor Variables",
+    y = "VIF Value"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(face = "bold", size = 14)
+  )
+
+# 4. Save the plot to your specified directory
+file_path_vif <- file.path(plots_dir, "vif_diagnostics_chart.png")
+ggsave(filename = file_path_vif, plot = p_vif, width = 8, height = 5, units = "in", dpi = 150)
+
+cat("\n VIF diagnostic bar chart saved successfully to:\n", plots_dir, "\n")
+```
 
