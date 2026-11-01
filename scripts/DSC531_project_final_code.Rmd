@@ -1,0 +1,1532 @@
+---
+title: "DSC531_project_final"
+output: html_document
+date: "2026-11-01"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(knitr)
+library(MASS)
+library(nortest)
+library(moments)
+library(DescTools)
+library(tidyverse)
+library(corrplot)
+library(leaps)
+library(car)
+
+# Clear graphics devices and define directory once
+graphics.off()
+plots_dir <- "C:/Users/mmari/OneDrive/Υπολογιστής/DSC531/DSC-531-AMAZON-BOOKS-DATASET/plots"
+
+if (!dir.exists(plots_dir)) {
+  dir.create(plots_dir, recursive = TRUE)
+}
+
+books <- read.csv("C:/Users/mmari/OneDrive/Υπολογιστής/DSC531/DSC-531-AMAZON-BOOKS-DATASET/data/Amazon_Data_Science_Books.csv")
+
+```
+
+```{r}
+
+# ==========================================
+# DSC531 - SEMESTER PROJECT
+# Amazon Data Science Books Dataset
+# ==========================================
+
+
+# ==========================================
+# 1. DATA UNDERSTANDING
+# ==========================================
+
+# 1.1 Load the original dataset
+#books <- read.csv(
+ # "data/Amazon_Data_Science_Books.csv",
+  #stringsAsFactors = FALSE
+#)
+
+# 1.2 Check the dimensions of the dataset
+print(dim(books))
+
+# 1.3 Display the first six observations
+print(head(books))
+
+# 1.4 Examine the structure and data types
+str(books)
+
+# 1.5 Display summary statistics
+print(summary(books))
+
+# 1.6 Check missing values (NA)
+print(colSums(is.na(books)))
+
+# 1.7 Check blank strings in character variables
+character_vars <- names(books)[
+  sapply(books, is.character)
+]
+
+blank_counts <- sapply(
+  books[, character_vars, drop = FALSE],
+  function(x) sum(!is.na(x) & trimws(x) == "")
+)
+
+print(blank_counts)
+
+# 1.8 Check the total number of observations
+print(nrow(books))
+
+# 1.9 Check the total number of variables
+print(ncol(books))
+```
+
+```{r}
+
+# ==========================================
+# 2. DATA CLEANING
+# ==========================================
+
+# 2.1 Create a working copy of the original dataset
+books_clean <- books
+
+# 2.2 Convert blank strings or whitespace-only strings to NA safely across character columns
+character_cols <- names(books_clean)[sapply(books_clean, is.character)]
+
+for (col in character_cols) {
+  books_clean[[col]][!is.na(books_clean[[col]]) & trimws(books_clean[[col]]) == ""] <- NA
+}
+
+# 2.3 Check missing values after string-to-NA conversion
+print(colSums(is.na(books_clean)))
+
+# 2.4 Count exact duplicate observations
+n_duplicates <- sum(duplicated(books_clean))
+cat("Total duplicate rows found:", n_duplicates, "\n")
+
+# 2.5 Remove exact duplicate observations (keeping the first occurrence)
+books_clean <- books_clean[!duplicated(books_clean), , drop = FALSE]
+
+# Reset row indices
+rownames(books_clean) <- NULL
+
+# 2.6 Verify cleaned dataset dimensions and zero duplicates
+cat("Cleaned dataset dimensions:", dim(books_clean), "\n")
+cat("Remaining duplicate rows:", sum(duplicated(books_clean)), "\n")
+```
+
+
+```{r}
+# 2.7 Inspect weight column to find the units of measurement
+# Extract measurement units from the weight column
+weight_units <- gsub("[0-9\\.]", "", books_clean$weight)
+weight_units <- trimws(weight_units)
+
+# 2.8 Convert weight to kilograms
+# Extract numeric portion of weight string
+weight_numeric <- as.numeric(gsub("[^0-9\\.]", "", books_clean$weight))
+
+
+books_clean$weight_kg <- ifelse(
+  weight_units == "ounces",
+  weight_numeric * 0.028349523125,
+  ifelse(
+    weight_units == "pounds",
+    weight_numeric * 0.45359237,
+    NA_real_
+  )
+)
+#Inspect converted weight results
+print(head(books_clean[, c("weight", "weight_kg")]))
+print(summary(books_clean$weight_kg))
+print(sum(!is.na(books_clean$weight_kg)))
+
+```
+
+
+```{r}
+# 2.9 Investigate extreme weight values
+
+# Display the 10 books with the lowest weights
+print(
+  head(
+    books_clean[
+      order(books_clean$weight_kg),
+      c("price", "pages", "weight", "weight_kg")
+    ],
+    10
+  )
+)
+
+# Display the 10 books with the highest weights
+print(
+  head(
+    books_clean[
+      order(books_clean$weight_kg, decreasing = TRUE),
+      c("price", "pages", "weight", "weight_kg")
+    ],
+    10
+  )
+)
+
+
+# 2.10 Detect weight outliers using the IQR method
+
+# Calculate the first and third quartiles
+Q1 <- quantile(books_clean$weight_kg, 0.25, na.rm = TRUE)
+Q3 <- quantile(books_clean$weight_kg, 0.75, na.rm = TRUE)
+
+# Calculate the interquartile range
+IQR_weight <- Q3 - Q1
+
+# Calculate the lower and upper bounds
+lower_bound <- Q1 - 1.5 * IQR_weight
+upper_bound <- Q3 + 1.5 * IQR_weight
+
+# Display the calculated values
+print("1st quartile:")
+print(Q1)
+print("3rd quartile:")
+print(Q3)
+print("IQR:")
+print(IQR_weight)
+print("Lower bound:")
+print(lower_bound)
+print("Upper bound:")
+print(upper_bound)
+
+# Identify weight outliers
+weight_outliers <- books_clean[
+  !is.na(books_clean$weight_kg) &
+    (books_clean$weight_kg < lower_bound |
+      books_clean$weight_kg > upper_bound),
+]
+
+# Count weight outliers
+print(nrow(weight_outliers))
+
+# Display detected outliers
+print("Detected weight outliers:")
+print(weight_outliers[, c(
+  "price", "pages",
+  "weight", "weight_kg"
+)])
+
+
+# 2.11 Investigate potentially implausible weights
+
+# Calculate grams per page
+books_clean$g_per_page <- (
+  books_clean$weight_kg * 1000
+) / books_clean$pages
+
+# Display summary statistics
+print(summary(books_clean$g_per_page))
+
+# Exploratory thresholds for suspicious values
+# These are diagnostic thresholds, not proven error limits
+lower_gpp <- 0.3
+upper_gpp <- 10
+
+# Flag potentially suspicious observations
+implausible_weight <- !is.na(books_clean$g_per_page) &
+  (books_clean$g_per_page < lower_gpp |
+    books_clean$g_per_page > upper_gpp)
+
+# Count flagged observations
+print(sum(implausible_weight))
+
+# Inspect flagged observations
+print(
+  books_clean[
+    implausible_weight,
+    c(
+      "price", "pages", "weight",
+      "weight_kg", "g_per_page"
+    )
+  ]
+)
+
+# Keep the original weights until further investigation
+# Do not automatically replace flagged values with NA
+# Remove the temporary diagnostic variable
+books_clean$g_per_page <- NULL
+
+# Verify the dataset dimensions
+print(dim(books_clean))
+
+
+# 2.12 Detect outliers in other numeric variables (IQR method)
+
+# Function that returns the number of IQR outliers of a variable
+count_outliers <- function(x) {
+  q1 <- quantile(x, 0.25, na.rm = TRUE)
+  q3 <- quantile(x, 0.75, na.rm = TRUE)
+  iqr <- q3 - q1
+  sum(x < q1 - 1.5 * iqr | x > q3 + 1.5 * iqr, na.rm = TRUE)
+}
+
+# Apply the function to the main numeric variables
+outlier_vars <- c("price", "pages", "avg_reviews", "n_reviews", "weight_kg")
+print(sapply(books_clean[, outlier_vars], count_outliers))
+
+
+# 2.13 Consistency checks for review variables
+
+star_vars <- c("star5", "star4", "star3", "star2", "star1")
+
+# Books without reviews have undefined star proportions
+books_clean[books_clean$n_reviews == 0, star_vars] <- NA
+
+# Check star proportions only for books with reviews
+reviewed_books <- books_clean$n_reviews > 0
+
+star_sum <- rowSums(
+  books_clean[reviewed_books, star_vars]
+)
+
+# Summary of star proportions
+print(summary(star_sum))
+
+# Count inconsistencies (tolerance: 0.05)
+print(sum(abs(star_sum - 1) > 0.05, na.rm = TRUE))
+
+# Check average rating range
+print(range(books_clean$avg_reviews, na.rm = TRUE))
+
+# Check invalid price and page values
+print(sum(books_clean$price <= 0, na.rm = TRUE))
+print(sum(books_clean$pages <= 0, na.rm = TRUE))
+
+# Count books without reviews
+print(sum(books_clean$n_reviews == 0))
+
+
+# 2.14 Convert language to a factor
+books_clean$language <- factor(books_clean$language)
+print(table(books_clean$language, useNA = "ifany"))
+# Almost all books are in English, so language is not useful
+# for group comparisons.
+
+
+# 2.15 Final check of the cleaned dataset
+# Missing values are kept; na.rm = TRUE is used in the calculations
+# so that no books are removed unnecessarily.
+print(colSums(is.na(books_clean)))
+str(books_clean)
+
+
+# 2.16 Estimate typical grams per page
+
+# Calculate grams per page
+g_per_page <- books_clean$weight_kg * 1000 / books_clean$pages
+
+# Flag potentially implausible values
+suspicious_weight <- !is.na(g_per_page) &
+  (g_per_page < 0.3 | g_per_page > 10)
+
+# Use only observations with available, non-suspicious ratios
+valid_gpp <- g_per_page[
+  !is.na(g_per_page) & !suspicious_weight
+]
+
+# Calculate the mean and median
+print(mean(valid_gpp))
+print(median(valid_gpp))
+
+# Check how much the values vary
+print(sd(valid_gpp))
+print(summary(valid_gpp))
+
+
+# 2.17 Compare weight statistics with and without suspicious values
+
+# Create a temporary copy of the weight variable
+weight_without_suspicious <- books_clean$weight_kg
+
+# Exclude suspicious weights from the comparison only
+weight_without_suspicious[suspicious_weight] <- NA
+
+# Compare descriptive statistics
+comparison <- data.frame(
+  Statistic = c("Mean", "Median", "SD"),
+  Original = c(
+    mean(books_clean$weight_kg, na.rm = TRUE),
+    median(books_clean$weight_kg, na.rm = TRUE),
+    sd(books_clean$weight_kg, na.rm = TRUE)
+  ),
+  Without_Suspicious = c(
+    mean(weight_without_suspicious, na.rm = TRUE),
+    median(weight_without_suspicious, na.rm = TRUE),
+    sd(weight_without_suspicious, na.rm = TRUE)
+  )
+)
+
+# Display the comparison
+print(comparison)
+
+
+# 2.18 Create a separate weight variable for analysis
+
+# Preserve original weight measurements
+books_clean$weight_analysis <- books_clean$weight_kg
+
+# Mark suspicious measurements as missing for analysis
+books_clean$weight_analysis[suspicious_weight] <- NA
+
+# Check the number of excluded measurements
+print(sum(is.na(books_clean$weight_analysis)))
+
+# Compare available observations
+print(sum(!is.na(books_clean$weight_kg)))
+print(sum(!is.na(books_clean$weight_analysis)))
+
+
+# 2.19 Compare correlations before and after excluding suspicious weights
+
+# Correlation using original weight measurements
+cor_original <- cor(
+  books_clean$pages,
+  books_clean$weight_kg,
+  use = "complete.obs"
+)
+
+# Correlation excluding suspicious weight measurements
+cor_filtered <- cor(
+  books_clean$pages,
+  books_clean$weight_analysis,
+  use = "complete.obs"
+)
+
+# Display results
+print(cor_original)
+print(cor_filtered)
+
+
+# 2.20 Final feature selection and export
+
+# Remove language because it has very low variability
+# The language distribution was already examined in Step 2.14
+books_clean$language <- NULL
+
+# Remove the original text weight variable
+# The converted weight_kg variable is retained
+books_clean$weight <- NULL
+
+# Check final dimensions and variables
+print(dim(books_clean))
+print(names(books_clean))
+
+books_export <- books_clean[, setdiff(names(books_clean), "weight")]
+# Save the final cleaned dataset
+write.csv(books_export,
+         ("C:/Users/mmari/OneDrive/Υπολογιστής/DSC531/DSC-531-AMAZON-BOOKS-DATASET/data/Amazon_Data_Science_Books.csv"),
+          row.names = FALSE)
+# Verify the exported dataset
+books_check <- read.csv(
+  "C:/Users/mmari/OneDrive/Υπολογιστής/DSC531/DSC-531-AMAZON-BOOKS-DATASET/data/Amazon_Data_Science_Books.csv"
+)
+
+print(dim(books_check))
+print(names(books_check))
+
+```
+
+```{r}
+# ==========================================
+# 3. SUMMARY STATISTICS
+# ==========================================
+
+# 3.1 Select the numeric variables
+# Use weight_analysis for the filtered weight summary
+
+num_vars <- c(
+  "price", "pages", "avg_reviews", "n_reviews",
+  "star5", "star4", "star3", "star2", "star1",
+  "weight_analysis"
+)
+
+
+# 3.2 Define a function to calculate skewness
+# Positive: right-skewed distribution
+# Negative: left-skewed distribution
+# Close to zero: approximately symmetric
+
+skewness <- function(x) {
+  x <- x[!is.na(x)]
+
+  if (length(x) < 3 || sd(x) == 0) {
+    return(NA_real_)
+  }
+
+  mean((x - mean(x))^3) / sd(x)^3
+}
+
+
+# 3.3 Define a function for descriptive statistics
+
+describe <- function(x) {
+  c(
+    n = sum(!is.na(x)),
+    missing = sum(is.na(x)),
+    mean = mean(x, na.rm = TRUE),
+    median = median(x, na.rm = TRUE),
+    sd = sd(x, na.rm = TRUE),
+    variance = var(x, na.rm = TRUE),
+    min = min(x, na.rm = TRUE),
+    Q1 = unname(quantile(x, 0.25, na.rm = TRUE)),
+    Q3 = unname(quantile(x, 0.75, na.rm = TRUE)),
+    max = max(x, na.rm = TRUE),
+    range = diff(range(x, na.rm = TRUE)),
+    IQR = IQR(x, na.rm = TRUE),
+    CV = sd(x, na.rm = TRUE) / mean(x, na.rm = TRUE),
+    skewness = skewness(x)
+  )
+}
+
+
+# 3.4 Create the descriptive statistics table
+
+summary_table <- t(
+  sapply(books_clean[, num_vars, drop = FALSE], describe)
+)
+
+print(round(summary_table, 3))
+if (!dir.exists("plots")) {
+  dir.create("plots", recursive = TRUE)
+}
+png("plots/3_4_weight_outliers.png",
+    width = 8, height = 6,
+    units = "in", res = 150)
+
+boxplot(
+  books_clean$weight_kg,
+  main = "Outlier Detection in Book Weight",
+  ylab = "Book Weight (kg)",
+  col = "lightblue",
+  border = "darkblue",
+  pch = 16
+)
+
+dev.off()
+
+# 3.5 Compare original and filtered weight statistics
+
+weight_comparison <- rbind(
+  weight_kg = describe(books_clean$weight_kg),
+  weight_analysis = describe(books_clean$weight_analysis)
+)
+
+print(round(weight_comparison, 3))
+
+
+# 3.6 Check missing values in the final dataset
+
+print(colSums(is.na(books_clean)))
+
+
+# 3.7 Verify the final dataset dimensions
+
+print(dim(books_clean))
+
+# Step 3.8 - Calculate Coefficient of Variation (%)
+
+cv_percent <- function(x) {
+  x <- x[!is.na(x)]
+  100 * sd(x) / mean(x)
+}
+
+sapply(
+  books_clean[c("price", "pages", "avg_reviews",
+                "n_reviews", "weight_analysis")],
+  cv_percent
+)
+```
+
+
+```{r}
+
+
+# ==========================================
+# 4. DATA VISUALIZATION
+# ==========================================
+
+# Create a folder for the plots
+dir.create("plots", showWarnings = FALSE)
+
+
+# 4.1 Histograms of the main numeric variables
+
+main_vars <- c(
+  "price",
+  "pages",
+  "avg_reviews",
+  "n_reviews",
+  "weight_analysis"
+)
+
+png(
+  "plots/4_1_histograms.png",
+  width = 12,
+  height = 8,
+  units = "in",
+  res = 150
+)
+
+# Arrange plots in 2 rows and 3 columns
+par(
+  mfrow = c(2, 3),
+  cex.main = 1.3,
+  cex.lab = 1.2,
+  cex.axis = 1.0
+)
+
+# Create a histogram for each variable
+for (v in main_vars) {
+  hist(
+    books_clean[[v]],
+    main = paste("Histogram of", v),
+    xlab = v,
+    col = "lightblue",
+    border = "white",
+    breaks = 30
+  )
+}
+
+# Reset graphical parameters
+par(mfrow = c(1, 1))
+
+# Save and close the image file
+dev.off()
+
+
+# Observations:
+# - Price is right-skewed, with a few expensive books.
+# - Pages is right-skewed, with some very large books.
+# - Average ratings are left-skewed, with most ratings
+#   concentrated between 4 and 5.
+# - Number of reviews is extremely right-skewed.
+# - Filtered weight is right-skewed, but extreme
+#   suspicious measurements have been excluded.
+
+
+# 4.2 Boxplots of the main numeric variables
+
+png(
+  "plots/4_2_boxplots.png",
+  width = 12,
+  height = 8,
+  units = "in",
+  res = 150
+)
+
+# Arrange plots in 2 rows and 3 columns
+par(
+  mfrow = c(2, 3),
+  cex.main = 1.3,
+  cex.lab = 1.2,
+  cex.axis = 1.0
+)
+
+# Create a boxplot for each variable
+for (v in main_vars) {
+  boxplot(
+    books_clean[[v]],
+    main = paste("Boxplot of", v),
+    ylab = v,
+    col = "lightblue",
+    border = "darkblue",
+    pch = 16,
+    cex = 0.6
+  )
+}
+
+# Reset graphical parameters
+par(mfrow = c(1, 1))
+
+# Save and close the image file
+dev.off()
+
+
+# Observations:
+# - Price contains several high-value outliers.
+# - Pages contains books with unusually high page counts.
+# - Average ratings contain some unusually low values.
+# - Number of reviews has many extreme high values.
+# - Filtered weight still contains some outliers.
+# - Outliers are not automatically removed.
+
+
+# 4.3 Histogram of log-transformed number of reviews
+
+# Apply log(1 + x) to handle zero reviews
+log_reviews <- log1p(books_clean$n_reviews)
+
+# Save the histogram
+png(
+  "plots/4_3_log_reviews.png",
+  width = 9,
+  height = 6,
+  units = "in",
+  res = 150
+)
+
+hist(
+  log_reviews,
+  breaks = 30,
+  main = "Histogram of Log-Transformed Reviews",
+  xlab = "log(1 + Number of Reviews)",
+  ylab = "Frequency",
+  col = "lightblue",
+  border = "white"
+)
+
+dev.off()
+
+
+# Compare skewness before and after transformation
+print(skewness(books_clean$n_reviews))
+print(skewness(log_reviews))
+
+
+# Observation:
+# The logarithmic transformation reduces the influence
+# of very large review counts and makes the distribution
+# easier to visualize.
+
+
+
+# 4.4 Bar plot of average star rating proportions
+
+# Select the star rating variables
+star_vars <- c(
+  "star5", "star4", "star3", "star2", "star1"
+)
+
+# Calculate the mean proportion for each rating
+# Books without reviews are excluded using na.rm = TRUE
+star_means <- colMeans(
+  books_clean[, star_vars],
+  na.rm = TRUE
+)
+
+# Display the mean proportions
+print(round(star_means, 3))
+
+# Save the bar plot
+png(
+  "plots/4_4_star_ratings.png",
+  width = 9,
+  height = 6,
+  units = "in",
+  res = 150
+)
+
+barplot(
+  star_means,
+  names.arg = c("5 Stars", "4 Stars", "3 Stars",
+                "2 Stars", "1 Star"),
+  main = "Average Star Rating Proportions",
+  xlab = "Star Rating",
+  ylab = "Mean Proportion",
+  col = "lightblue",
+  border = "darkblue",
+  ylim = c(0, 0.8)
+)
+
+dev.off()
+
+
+# Observation:
+# Five-star ratings account for the largest average
+# proportion of reviews across reviewed books.
+# Books without reviews are excluded from the calculation.
+
+
+
+# 4.5 Scatterplot: Pages vs Price
+
+# Calculate Pearson correlation
+cor_pages_price <- cor(
+  books_clean$pages,
+  books_clean$price,
+  use = "complete.obs"
+)
+
+print(cor_pages_price)
+
+# Fit a simple linear regression model
+model_pages_price <- lm(
+  price ~ pages,
+  data = books_clean
+)
+
+# Save the scatterplot
+png(
+  "plots/4_5_pages_vs_price.png",
+  width = 9,
+  height = 6,
+  units = "in",
+  res = 150
+)
+
+plot(
+  books_clean$pages,
+  books_clean$price,
+  main = "Scatterplot: Pages vs Price",
+  xlab = "Number of Pages",
+  ylab = "Price",
+  col = "steelblue",
+  pch = 16,
+  cex = 0.6
+)
+
+# Add the regression line
+abline(
+  model_pages_price,
+  col = "red",
+  lwd = 2
+)
+
+dev.off()
+
+
+# Observation:
+# The scatterplot is used to examine whether
+# books with more pages tend to have higher prices.
+# The correlation coefficient measures the strength
+# and direction of the linear relationship.
+
+
+# 4.6 Scatterplots: Pages vs Weight
+# Compare original and filtered weight measurements
+
+png(
+  "plots/4_6_pages_vs_weight.png",
+  width = 12,
+  height = 6,
+  units = "in",
+  res = 150
+)
+
+par(mfrow = c(1, 2))
+
+# Original weight measurements
+plot(
+  books_clean$pages,
+  books_clean$weight_kg,
+  main = "Pages vs Original Weight",
+  xlab = "Number of Pages",
+  ylab = "Weight (kg)",
+  col = "steelblue",
+  pch = 16,
+  cex = 0.6
+)
+
+# Filtered weight measurements
+plot(
+  books_clean$pages,
+  books_clean$weight_analysis,
+  main = "Pages vs Filtered Weight",
+  xlab = "Number of Pages",
+  ylab = "Weight (kg)",
+  col = "darkgreen",
+  pch = 16,
+  cex = 0.6
+)
+
+par(mfrow = c(1, 1))
+
+dev.off()
+
+# Compare Pearson correlations
+print(cor(
+  books_clean$pages,
+  books_clean$weight_kg,
+  use = "complete.obs"
+))
+
+print(cor(
+  books_clean$pages,
+  books_clean$weight_analysis,
+  use = "complete.obs"
+))
+
+
+# Observation:
+# Compare the original and filtered relationships.
+# Filtering based on grams per page may itself
+# influence the observed correlation.
+
+
+
+# 4.7 Scatterplot: Average Rating vs Log(Number of Reviews)
+
+# Calculate log-transformed number of reviews
+log_reviews <- log1p(books_clean$n_reviews)
+
+# Calculate Pearson correlation
+cor_reviews_rating <- cor(
+  log_reviews,
+  books_clean$avg_reviews,
+  use = "complete.obs"
+)
+
+print(cor_reviews_rating)
+
+# Fit a simple linear regression model
+model_reviews_rating <- lm(
+  avg_reviews ~ log_reviews,
+  data = books_clean
+)
+
+# Save the scatterplot
+png(
+  "plots/4_7_reviews_vs_rating.png",
+  width = 9,
+  height = 6,
+  units = "in",
+  res = 150
+)
+
+plot(
+  log_reviews,
+  books_clean$avg_reviews,
+  main = "Average Rating vs Log(Number of Reviews)",
+  xlab = "log(1 + Number of Reviews)",
+  ylab = "Average Rating",
+  col = "darkorange",
+  pch = 16,
+  cex = 0.6
+)
+
+# Add the regression line
+abline(
+  model_reviews_rating,
+  col = "red",
+  lwd = 2
+)
+
+dev.off()
+
+
+# Observation:
+# This plot examines whether books with more reviews
+# tend to have higher or lower average ratings.
+# Correlation does not imply causation.
+
+```
+
+
+```{r}
+
+# Ensure the plots directory exists
+if (!dir.exists("plots")) {
+  dir.create("plots", recursive = TRUE)
+}
+
+# 1. Plotting the histograms for understanding the variability of the data
+png("plots/histograms_grid.png", width = 10, height = 12, units = "in", res = 150)
+par(mfrow = c(3, 2), mar = c(4, 4, 2, 1)) # Optimized margins to prevent margin errors
+
+hist(books_clean$price, main = "Distribution of Price", xlab = "Price", col = "skyblue", border = "black")
+hist(books_clean$pages, main = "Distribution of Pages", xlab = "Pages", col = "lightgreen", border = "black")
+hist(books_clean$n_reviews, main = "Distribution of Reviews", xlab = "Number of Reviews", col = "pink", border = "black")
+hist(books_clean$avg_reviews, main = "Distribution of Average Reviews", xlab = "Average Reviews", col = "yellow", border = "black")
+hist(books_clean$weight_kg, main = "Distribution of Weight", xlab = "Weight (kg)", col = "grey", border = "black")
+
+dev.off()
+par(mfrow = c(1, 1)) # Reset layout
+
+
+# 2. Create log-transformed columns (using + 1 to handle zeros safely)
+books_clean$log_price     <- log(books_clean$price + 1)
+books_clean$log_pages     <- log(books_clean$pages + 1)
+books_clean$log_n_reviews <- log(books_clean$n_reviews + 1)
+books_clean$log_weight    <- log(books_clean$weight_kg + 1)
+
+
+# 3. Plot the original variables against avg_reviews
+png("plots/scatterplots_original.png", width = 1600, height = 1200, res = 180)
+par(mfrow = c(2, 2), mar = c(4, 4, 2, 1))
+
+plot(books_clean$price, books_clean$avg_reviews,
+     xlab = "Price", ylab = "Avg Reviews",
+     main = "Price vs Avg Reviews", col = "darkblue", pch = 16, cex = 0.6)
+
+plot(books_clean$pages, books_clean$avg_reviews,
+     xlab = "Pages", ylab = "Avg Reviews",
+     main = "Pages vs Avg Reviews", col = "darkblue", pch = 16, cex = 0.6)
+
+plot(books_clean$n_reviews, books_clean$avg_reviews,
+     xlab = "Number of Reviews", ylab = "Avg Reviews",
+     main = "N_Reviews vs Avg Reviews", col = "darkblue", pch = 16, cex = 0.6)
+
+plot(books_clean$weight_kg, books_clean$avg_reviews,
+     xlab = "Weight (kg)", ylab = "Avg Reviews",
+     main = "Weight vs Avg Reviews", col = "darkblue", pch = 16, cex = 0.6)
+
+dev.off()
+par(mfrow = c(1, 1)) # Reset layout
+
+
+# 4. Plot the log-transformed variables against avg_reviews for comparison
+png("plots/scatterplots_log_transformed.png", width = 1600, height = 1200, res = 180)
+par(mfrow = c(2, 2), mar = c(4, 4, 2, 1))
+
+plot(books_clean$log_price, books_clean$avg_reviews,
+     xlab = "Log(Price + 1)", ylab = "Avg Reviews",
+     main = "Log Price vs Avg Reviews", col = "darkblue", pch = 16, cex = 0.6)
+
+plot(books_clean$log_pages, books_clean$avg_reviews,
+     xlab = "Log(Pages + 1)", ylab = "Avg Reviews",
+     main = "Log Pages vs Avg Reviews", col = "darkblue", pch = 16, cex = 0.6)
+
+plot(books_clean$log_n_reviews, books_clean$avg_reviews,
+     xlab = "Log(N_Reviews + 1)", ylab = "Avg Reviews",
+     main = "Log N_Reviews vs Avg Reviews", col = "darkblue", pch = 16, cex = 0.6)
+
+plot(books_clean$log_weight, books_clean$avg_reviews,
+     xlab = "Log(Weight + 1)", ylab = "Avg Reviews",
+     main = "Log Weight vs Avg Reviews", col = "darkblue", pch = 16, cex = 0.6)
+
+dev.off()
+par(mfrow = c(1, 1)) # Reset layout
+
+
+# 5. Correlation Matrix & Heatmap
+# Select only numeric columns for correlation
+numeric_vars <- books_clean[, c("price", "pages", "n_reviews", "avg_reviews", "weight_kg")]
+
+# Calculate the correlation matrix
+cor_matrix <- cor(numeric_vars, use = "complete.obs")
+
+# Draw and save the correlation heatmap securely
+png("plots/correlation_matrix.png", width = 1200, height = 1200, res = 150)
+
+corrplot(cor_matrix, 
+         method = "color",       # Uses color blocks
+         type = "upper",         # Shows upper triangle to avoid duplication
+         addCoef.col = "black",  # Prints correlation coefficients inside boxes
+         number.cex = 0.7,       # Size of text numbers
+         tl.col = "black",       # Text label color
+         tl.srt = 45,            # Rotates text labels 45 degrees for readability
+         main = "Correlation Matrix of Book Variables",
+         mar = c(0, 0, 2, 0))
+
+dev.off()
+
+```
+
+```{r}
+# 1. Keep only numeric columns
+books_numeric <- books_clean[sapply(books_clean, is.numeric)]
+
+# Calculate correlation matrix safely using pairwise complete observations
+cor_matrix <- round(cor(books_numeric, use = "pairwise.complete.obs"), 2)
+print(cor_matrix)
+
+# 2. Save correlation heatmap (corrplot)
+file_path_corr <- file.path(plots_dir, "correlation_matrix_heatmap.png")
+png(filename = file_path_corr, width = 10, height = 8, units = "in", res = 150)
+
+corrplot(cor_matrix, method = "color", type = "upper", 
+         addCoef.col = "black", 
+         tl.col = "black", tl.srt = 45, 
+         main = "Correlation Matrix of Amazon Books")
+
+dev.off()
+
+# 3. Save Pairs Plot (Pairwise Scatter Plot Matrix)
+# (Due to the number of columns, pairs benefits from a slightly larger width/height)
+file_path_pairs <- file.path(plots_dir, "pairwise_scatterplot_matrix.png")
+png(filename = file_path_pairs, width = 12, height = 12, units = "in", res = 150)
+
+pairs(books_numeric, 
+      main = "Pairwise Scatter Plot Matrix of Amazon Books",
+      pch = 19, 
+      col = adjustcolor("blue", alpha.f = 0.4))
+
+dev.off()
+
+```
+
+
+```{r}
+
+# 1. Loop to generate and save distribution plots for each numeric variable
+numeric_vars <- names(books_clean %>% select(where(is.numeric)))
+
+for (v in numeric_vars) {
+  
+  safe_v_name <- gsub("[^A-Za-z0-9_]", "_", v)
+  file_path <- file.path(plots_dir, paste0("distribution_", safe_v_name, ".png"))
+  
+  p <- ggplot(books_clean, aes_string(x = v)) +
+    geom_histogram(aes(y = ..density..), bins = 60, fill = "steelblue", color = "white", alpha = 0.7) +
+    geom_density(color = "darkred", size = 1) +
+    labs(title = paste("Distribution of", v),
+         subtitle = "Histogram and Kernel Density Estimate",
+         x = v, y = "Density") +
+    theme_minimal() +
+    theme(plot.title = element_text(face = "bold", size = 14))
+  
+  ggsave(
+    filename = file_path,
+    plot = p,
+    width = 8,
+    height = 6,
+    units = "in",
+    dpi = 150
+  )
+}
+
+
+```
+
+```{r}
+# 1. Select only star1 to star5 variables and reshape to long format
+stars_long <- books_clean %>%
+  select(matches("^star[1-5]$")) %>%
+  pivot_longer(cols = everything(), names_to = "variable", values_to = "value")
+
+# 2. Create faceted histograms with kernel density curves
+p <- ggplot(stars_long, aes(x = value, fill = variable)) +
+  geom_histogram(aes(y = ..density..), bins = 30, color = "white", alpha = 0.7) +
+  geom_density(color = "darkred", size = 1) +
+  facet_wrap(~ variable, scales = "free") +
+  labs(
+    title = "Histograms and Density Curves of Star Ratings (star1 to star5)",
+    subtitle = "Checking distribution, frequency, and kernel density",
+    x = "Value",
+    y = "Density"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    strip.text = element_text(face = "bold", size = 11),
+    plot.title = element_text(face = "bold", size = 14)
+  )
+
+# 3. Save the plot using ggsave and the predefined plots_dir
+file_path <- file.path(plots_dir, "star_variables_histograms_density.png")
+
+ggsave(
+  filename = file_path,
+  plot = p,
+  width = 10,
+  height = 8,
+  units = "in",
+  dpi = 150
+)
+```
+
+```{r}
+# 1. Select specific variables and reshape to long format
+numeric_subset_long <- books_clean %>%
+  select(pages, price, avg_reviews, n_reviews) %>%
+  pivot_longer(cols = everything(), names_to = "variable", values_to = "value")
+
+# 2. Create faceted histograms with kernel density curves
+p <- ggplot(numeric_subset_long, aes(x = value, fill = variable)) +
+  geom_histogram(aes(y = after_stat(density)), bins = 40, color = "white", alpha = 0.7) +
+  geom_density(color = "darkred", linewidth = 1) +
+  facet_wrap(~ variable, scales = "free") +
+  labs(
+    title = "Histograms and Density Curves of Key Numeric Variables",
+    subtitle = "Faceted distribution check for pages, price, avg_reviews, and n_reviews",
+    x = "Value",
+    y = "Density"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    strip.text = element_text(face = "bold", size = 11),
+    plot.title = element_text(face = "bold", size = 14)
+  )
+
+# 3. Save the plot using ggsave
+file_path <- file.path(plots_dir, "key_numeric_variables_histograms_density.png")
+
+ggsave(
+  filename = file_path,
+  plot = p,
+  width = 11,
+  height = 8,
+  units = "in",
+  dpi = 150
+)
+```
+
+```{r}
+
+# 1. Select numeric variables and convert to long format for faceted plotting
+books_long <- books_clean %>%
+  select(where(is.numeric)) %>%
+  pivot_longer(cols = everything(), names_to = "variable", values_to = "value")
+
+# 2. Create a single faceted box plot for all numeric variables
+p <- ggplot(books_long, aes(x = variable, y = value, fill = variable)) +
+  geom_boxplot(alpha = 0.7, outlier.color = "red", outlier.shape = 16) +
+  facet_wrap(~ variable, scales = "free") +
+  labs(
+    title = "Box Plots for Numerical Variables",
+    subtitle = "Checking distribution and potential outliers",
+    x = "",
+    y = "Value"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    axis.text.x = element_blank(), # Hide redundant x-axis labels
+    axis.ticks.x = element_blank(),
+    strip.text = element_text(face = "bold", size = 11), # Panel titles
+    plot.title = element_text(face = "bold", size = 14)
+  )
+
+# 3. Save the plot using ggsave
+file_path <- file.path(plots_dir, "all_numeric_boxplots.png")
+
+ggsave(
+  filename = file_path,
+  plot = p,
+  width = 10,
+  height = 8,
+  units = "in",
+  dpi = 150
+)
+
+```
+
+```{r}
+# 3.2. CATEGORICAL VARIABLES (Bar Charts)
+categorical_vars <- names(books_clean %>% select(where(~ !is.numeric(.))))
+
+for (v in categorical_vars) {
+  
+  # Safe file name generation
+  safe_v_name <- gsub("[^A-Za-z0-9_]", "_", v)
+  file_path <- file.path(plots_dir, paste0("categorical_bar_", safe_v_name, ".png"))
+  
+  # Create plot using modern .data syntax
+  p <- ggplot(books_clean, aes(x = .data[[v]])) +
+    geom_bar(fill = "forestgreen", color = "black", alpha = 0.7) +
+    labs(title = paste("Frequency Count of", v),
+         subtitle = "Categorical Breakdown",
+         x = v, y = "Count") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1),
+          plot.title = element_text(face = "bold", size = 14))
+  
+  # Save using ggsave()
+  ggsave(
+    filename = file_path,
+    plot = p,
+    width = 10,
+    height = 6,
+    units = "in",
+    dpi = 150
+  )
+}
+```
+
+```{r}
+# --- Hypothesis 1: Price vs Page Count (OLS vs. LOESS vs. Nadaraya-Watson) ---
+
+# 1. Perform Pearson correlation test to evaluate linear association
+cor_test_h1 <- cor.test(books_clean$pages, log(1 + books_clean$price), method = "pearson")
+print(cor_test_h1)
+
+# 2. Visualize the models using ggplot2 (handling missing values on-the-fly)
+p <- ggplot(books_clean, aes(x = pages, y = log(1 + price))) +
+  # Scatterplot representing individual book observations
+  geom_point(alpha = 0.3, color = "#2c3e50") +
+  
+  # Linear OLS regression fit (parametric baseline)
+  geom_smooth(method = "lm", aes(color = "OLS Linear"), se = FALSE, linetype = "dashed", linewidth = 1) +
+  
+  # LOESS (Local Polynomial Regression) fit to capture non-linearities
+  geom_smooth(method = "loess", aes(color = "LOESS (Local Poly)"), se = FALSE, linewidth = 1) +
+  
+  # Nadaraya-Watson Kernel Regression estimator (local constant smoothing)
+  geom_line(
+    data = as.data.frame(ksmooth(na.omit(books_clean$pages), na.omit(log(1 + books_clean$price)), kernel = "normal", bandwidth = 100)),
+    aes(x = x, y = y, color = "Nadaraya-Watson"),
+    linewidth = 1
+  ) +
+  
+  # Define custom colors for each estimation method
+  scale_color_manual(
+    name = "Estimation Method",
+    values = c("OLS Linear" = "red", "LOESS (Local Poly)" = "blue", "Nadaraya-Watson" = "darkgreen")
+  ) +
+  
+  # Add titles, axis labels, and statistical context
+  labs(
+    title = "Hypothesis 1: Price vs. Page Count",
+    subtitle = "Comparison of Parametric (OLS) and Non-Parametric (LOESS & Nadaraya-Watson) Estimators",
+    x = "Page Count (pages)",
+    y = "Log Price (log(1 + price))"
+  ) +
+  theme_minimal()
+
+# 3. Save plot using ggsave
+file_path <- file.path(plots_dir, "hypothesis_1_price_pages.png")
+
+ggsave(
+  filename = file_path,
+  plot = p,
+  width = 10,
+  height = 7,
+  units = "in",
+  dpi = 150
+)
+```
+
+```{r}
+# --- Hypothesis 2: Price Differentiation by Review Engagement ---
+
+# 1. Create a binary engagement variable based on review counts
+books_clean$has_reviews <- factor(
+  ifelse(!is.na(books_clean$n_reviews) & books_clean$n_reviews > 0, "With Reviews", "No Reviews")
+)
+
+# 2. Perform Welch Two-Sample t-test
+t_test_h2 <- t.test(log(1 + price) ~ has_reviews, data = books_clean)
+print(t_test_h2)
+
+# 3. Visualize the price distribution across review status (Boxplot & Violin plot)
+p <- ggplot(books_clean, aes(x = has_reviews, y = log(1 + price), fill = has_reviews)) +
+  geom_violin(alpha = 0.3, trim = FALSE) +
+  geom_boxplot(width = 0.2, outlier.color = "red", alpha = 0.7) +
+  scale_fill_manual(values = c("No Reviews" = "#e74c3c", "With Reviews" = "#2ecc71")) +
+  labs(
+    title = "Hypothesis 2: Price Comparison by Review Status",
+    subtitle = "Welch Two-Sample t-Test on Log-Transformed Prices",
+    x = "Review Engagement Status",
+    y = "Log Price (log(1 + price))"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+# 4. Save the plot using ggsave
+file_path <- file.path(plots_dir, "hypothesis_2_price_reviews.png")
+
+ggsave(
+  filename = file_path,
+  plot = p,
+  width = 10,
+  height = 7,
+  units = "in",
+  dpi = 150
+)
+
+```
+```{r}
+# Hypothesis 3: Ratings Variation Across Review Engagement Levels 
+# Note: Since avg_reviews is structurally NA for books with zero reviews, 
+# we evaluate rating variation within the subset of reviewed books based on review volume (median split).
+
+# 1. Filter for books with reviews and valid average ratings
+reviewed_books <- subset(books_clean, !is.na(avg_reviews) & n_reviews > 0)
+
+# 2. Create binary engagement groups (High vs. Low based on median review count)
+median_reviews <- median(reviewed_books$n_reviews, na.rm = TRUE)
+reviewed_books$engagement_group <- factor(
+  ifelse(reviewed_books$n_reviews >= median_reviews, "High Engagement", "Low Engagement")
+)
+
+# 3. Parametric Two-Sample Welch t-test
+t_test_h3_alt <- t.test(avg_reviews ~ engagement_group, data = reviewed_books)
+print(t_test_h3_alt)
+
+# 4. Non-parametric Wilcoxon rank-sum test (Mann-Whitney U)
+wilcox_h3_alt <- wilcox.test(avg_reviews ~ engagement_group, data = reviewed_books)
+print(wilcox_h3_alt)
+
+# 5. Boxplot & Violin plot Visualization
+p <- ggplot(reviewed_books, aes(x = engagement_group, y = avg_reviews, fill = engagement_group)) +
+  geom_violin(alpha = 0.3, trim = FALSE) +
+  geom_boxplot(width = 0.2, outlier.color = "red", alpha = 0.7) +
+  scale_fill_manual(values = c("Low Engagement" = "#3498db", "High Engagement" = "#9b59b6")) +
+  labs(
+    title = "Hypothesis 3: Average Ratings by Review Engagement Level",
+    subtitle = "Comparing High vs. Low Review Count Subsamples (Welch t-test & Wilcoxon)",
+    x = "Engagement Group (Based on Median Review Count)",
+    y = "Average Rating (avg_reviews)"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+# 6. Save the plot using ggsave
+file_path <- file.path(plots_dir, "hypothesis_3_ratings_engagement.png")
+
+ggsave(
+  filename = file_path,
+  plot = p,
+  width = 10,
+  height = 7,
+  units = "in",
+  dpi = 150
+)
+```
+
+```{r}
+# --- Hypothesis 4: Review Volume (n_reviews) vs Log Price ---
+# 1. Spearman Rank Correlation (robust against heavy tails)
+cor_h4 <- cor.test(books_clean$n_reviews, log(1 + books_clean$price), method = "spearman", exact = FALSE)
+print(cor_h4)
+
+# 2. Scatterplot with Log-Log Scale and LOESS fit
+p <- ggplot(books_clean, aes(x = log(1 + n_reviews), y = log(1 + price))) +
+  geom_point(alpha = 0.3, color = "#2980b9") +
+  geom_smooth(method = "lm", color = "red", linetype = "dashed", se = FALSE) +
+  geom_smooth(method = "loess", color = "darkblue", se = FALSE) +
+  labs(
+    title = "Hypothesis 4: Log Review Volume vs. Log Price",
+    subtitle = "Spearman Correlation & Non-Parametric Fit",
+    x = "Log Review Count (log(1 + n_reviews))",
+    y = "Log Price (log(1 + price))"
+  ) +
+  theme_minimal()
+
+# 3. Save the plot using ggsave
+file_path <- file.path(plots_dir, "hypothesis_4_reviews_price.png")
+
+ggsave(
+  filename = file_path,
+  plot = p,
+  width = 10,
+  height = 7,
+  units = "in",
+  dpi = 150
+)
+```
+```{r}
+# --- Hypothesis 5: Average Rating (avg_reviews) vs Log Price ---
+
+# 1. Spearman Rank Correlation
+cor_h5 <- cor.test(books_clean$avg_reviews, log(1 + books_clean$price), method = "spearman", exact = FALSE)
+print(cor_h5)
+
+# 2. Scatterplot with LOESS fit
+p <- ggplot(books_clean, aes(x = avg_reviews, y = log(1 + price))) +
+  geom_point(alpha = 0.3, color = "#27ae60") +
+  geom_smooth(method = "lm", color = "red", linetype = "dashed", se = FALSE) +
+  geom_smooth(method = "loess", color = "darkgreen", se = FALSE) +
+  labs(
+    title = "Hypothesis 5: Average Rating vs. Log Price",
+    subtitle = "Testing the Quality Premium Hypothesis",
+    x = "Average Rating (avg_reviews)",
+    y = "Log Price (log(1 + price))"
+  ) +
+  theme_minimal()
+
+# 3. Save the plot using ggsave
+file_path <- file.path(plots_dir, "hypothesis_5_rating_price.png")
+
+ggsave(
+  filename = file_path,
+  plot = p,
+  width = 10,
+  height = 7,
+  units = "in",
+  dpi = 150
+)
+
+```
+```{r}
+# --- Step 1: Multivariate OLS Model Construction ---
+# Model specification based on validated hypotheses (H1, H2, H4)
+ols_model <- lm(log(1 + price) ~ pages + has_reviews + log(1 + n_reviews), data = books_clean)
+
+# Summary of the model output
+summary_ols <- summary(ols_model)
+print(summary_ols)
+
+# --- Step 2: Diagnostic Checks ---
+
+# 1. Multicollinearity check (VIF < 5 indicates no severe multicollinearity)
+
+
+vif_values <- vif(ols_model)
+print("--- Variance Inflation Factor (VIF) ---")
+print(vif_values)
+
+# 2. Diagnostic Plots (Residuals vs Fitted, Q-Q Plot, Scale-Location, Residuals vs Leverage)
+
+file_path_diag <- file.path(plots_dir, "ols_model_diagnostics.png")
+
+png(filename = file_path_diag, width = 10, height = 8, units = "in", res = 150)
+par(mfrow = c(2, 2))
+plot(ols_model)
+par(mfrow = c(1, 1))
+dev.off()
+```
+```{r}
+# Define a list of formula specifications for the loop
+model_formulas <- list(
+  "1. Without Stars" = avg_reviews ~ pages + log(1 + price) + log(1 + n_reviews),
+  "2. With Star5"    = avg_reviews ~ pages + log(1 + price) + log(1 + n_reviews) + star5,
+  "3. With Star5 & Star4" = avg_reviews ~ pages + log(1 + price) + log(1 + n_reviews) + star5 + log(1 + star4)
+)
+
+# Loop through each specification to fit the model and check diagnostics
+for (model_name in names(model_formulas)) {
+  
+  # Print separator and current model name
+  cat("==================================================\n")
+  cat("Model Specification:", model_name, "\n")
+  cat("==================================================\n")
+  
+  # Fit the OLS regression model
+  current_model <- lm(model_formulas[[model_name]], data = books_clean)
+  
+  # Print the regression summary output
+  print(summary(current_model))
+  
+  # Calculate and print Variance Inflation Factor (VIF) for multicollinearity check
+  cat("\n--- Variance Inflation Factor (VIF) ---\n")
+  print(car::vif(current_model))
+  
+  cat("\n\n")
+}
+```
+```{r}
+
+# 1. Calculate VIF values from your fitted OLS model
+vif_vals <- vif(ols_model)
+
+# 2. Convert the VIF vector into a clean data frame for ggplot
+vif_df <- data.frame(
+  Variable = names(vif_vals),
+  VIF = as.numeric(vif_vals)
+)
+
+# 3. Create the VIF bar chart using ggplot2
+p_vif <- ggplot(vif_df, aes(x = reorder(Variable, VIF), y = VIF, fill = VIF)) +
+  geom_col(width = 0.6, alpha = 0.8, color = "black") +
+  # Add a horizontal dashed line representing the critical threshold (e.g., 5.0)
+  geom_hline(yintercept = 5.0, color = "red", linetype = "dashed", linewidth = 1) +
+  coord_flip() + # Makes it a horizontal bar chart for clean label reading
+  labs(
+    title = "Variance Inflation Factor (VIF) Diagnostics",
+    subtitle = "Checking for Multicollinearity (Threshold = 5.0)",
+    x = "Predictor Variables",
+    y = "VIF Value"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(face = "bold", size = 14)
+  )
+
+# 4. Save the plot to your specified directory
+file_path_vif <- file.path(plots_dir, "vif_diagnostics_chart.png")
+ggsave(filename = file_path_vif, plot = p_vif, width = 8, height = 5, units = "in", dpi = 150)
+
+
+```
+

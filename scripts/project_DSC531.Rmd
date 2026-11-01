@@ -317,7 +317,11 @@ print(dim(books_check))
 str(books_check)
 
 ```
+```{r}
 
+
+
+```
 
 ```{r}
 
@@ -469,6 +473,8 @@ ggsave(
 cat("\n Το γράφημα ιστογραμμάτων με τη γραμμή κατανομής αποθηκεύτηκε επιτυχώς στον φάκελο:\n", plots_dir, "\n")
 
 ```
+
+
 ```{r}
 # 1. Καθαρισμός graphics devices
 graphics.off()
