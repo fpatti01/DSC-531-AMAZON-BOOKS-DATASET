@@ -21,13 +21,13 @@ library(car)
 
 # Clear graphics devices and define directory once
 graphics.off()
-plots_dir <- "C:/Users/mmari/OneDrive/Υπολογιστής/DSC531/DSC-531-AMAZON-BOOKS-DATASET/plots"
+plots_dir <- "DSC-531-AMAZON-BOOKS-DATASET/plots"
 
 if (!dir.exists(plots_dir)) {
   dir.create(plots_dir, recursive = TRUE)
 }
 
-books <- read.csv("C:/Users/mmari/OneDrive/Υπολογιστής/DSC531/DSC-531-AMAZON-BOOKS-DATASET/data/Amazon_Data_Science_Books.csv")
+books <- read.csv("data/Amazon_Data_Science_Books.csv")
 
 ```
 
@@ -422,12 +422,12 @@ print(names(books_clean))
 books_export <- books_clean[, setdiff(names(books_clean), "weight")]
 # Save the final cleaned dataset
 write.csv(books_export,
-         ("C:/Users/mmari/OneDrive/Υπολογιστής/DSC531/DSC-531-AMAZON-BOOKS-DATASET/data/Amazon_Data_Science_Books.csv"),
+         "data/Amazon_Data_Science_Books_final.csv",
           row.names = FALSE)
 # Verify the exported dataset
 books_check <- read.csv(
-  "C:/Users/mmari/OneDrive/Υπολογιστής/DSC531/DSC-531-AMAZON-BOOKS-DATASET/data/Amazon_Data_Science_Books.csv"
-)
+  "data/Amazon_Data_Science_Books_final.csv"
+ )
 
 print(dim(books_check))
 print(names(books_check))
