@@ -1245,6 +1245,14 @@ for (v in categorical_vars) {
 cor_test_h1 <- cor.test(books_clean$pages, log(1 + books_clean$price), method = "pearson")
 print(cor_test_h1)
 
+# Keep only books with both pages and price, so the (x, y) pairs stay matched
+cc_h1 <- complete.cases(books_clean$pages, books_clean$price)
+nw_fit <- as.data.frame(
+  ksmooth(books_clean$pages[cc_h1],
+          log1p(books_clean$price[cc_h1]),
+          kernel = "normal", bandwidth = 100)
+)
+
 # 2. Visualize the models using ggplot2 (handling missing values on-the-fly)
 p <- ggplot(books_clean, aes(x = pages, y = log(1 + price))) +
   # Scatterplot representing individual book observations
@@ -1258,7 +1266,7 @@ p <- ggplot(books_clean, aes(x = pages, y = log(1 + price))) +
   
   # Nadaraya-Watson Kernel Regression estimator (local constant smoothing)
   geom_line(
-    data = as.data.frame(ksmooth(na.omit(books_clean$pages), na.omit(log(1 + books_clean$price)), kernel = "normal", bandwidth = 100)),
+    data = nw_fit,
     aes(x = x, y = y, color = "Nadaraya-Watson"),
     linewidth = 1
   ) +
