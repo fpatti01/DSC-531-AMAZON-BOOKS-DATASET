@@ -1,6 +1,6 @@
 ---
 title: "DSC531 Semester Project - Amazon Data Science Books"
-author: "DSC531 Project Team"
+author: "Florentia Pattidou, Valeria Shirshina, Marios Makrygiannis"
 date: "`r Sys.Date()`"
 output:
   html_document:
@@ -9,7 +9,7 @@ output:
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 # The Rmd lives in scripts/, so run all code from the project root
 knitr::opts_knit$set(root.dir = normalizePath(".."))
 ```
@@ -17,15 +17,10 @@ knitr::opts_knit$set(root.dir = normalizePath(".."))
 # 0. Libraries and data
 
 ```{r libraries}
-library(knitr)
-library(MASS)
-library(nortest)
-library(moments)
-library(DescTools)
-library(tidyverse)
-library(corrplot)
-library(leaps)
-library(car)
+library(knitr)      # report generation
+library(tidyverse)  # data manipulation and ggplot2 graphics
+library(corrplot)   # correlation heatmaps
+library(car)        # variance inflation factors (VIF)
 
 # Clear graphics devices and define directory once
 graphics.off()
@@ -74,6 +69,24 @@ print(nrow(books))
 
 # 1.9 Check the total number of variables
 print(ncol(books))
+
+# 1.10 Missing values per row (NA or blank string)
+# Identify books with more than one missing value
+missing_matrix <- is.na(books) |
+  sapply(books, function(x) trimws(as.character(x)) == "")
+missing_matrix[is.na(missing_matrix)] <- TRUE
+
+missing_per_row <- rowSums(missing_matrix)
+
+# Number of rows with at least one / more than one missing value
+print(sum(missing_per_row > 0))
+print(sum(missing_per_row > 1))
+
+# Show which variables are missing in rows with more than one missing value
+for (i in which(missing_per_row > 1)) {
+  cat("Row", i, "has", missing_per_row[i], "missing values:",
+      names(books)[missing_matrix[i, ]], "\n")
+}
 ```
 
 # 2. Data cleaning
@@ -98,6 +111,12 @@ print(colSums(is.na(books_clean)))
 # 2.4 Count exact duplicate observations
 n_duplicates <- sum(duplicated(books_clean))
 cat("Total duplicate rows found:", n_duplicates, "\n")
+
+# Display all rows involved in duplicate groups
+duplicate_rows <- which(
+  duplicated(books_clean) | duplicated(books_clean, fromLast = TRUE)
+)
+print(books_clean[duplicate_rows, , drop = FALSE])
 
 # 2.5 Remove exact duplicate observations (keeping the first occurrence)
 books_clean <- books_clean[!duplicated(books_clean), , drop = FALSE]
@@ -296,6 +315,50 @@ print(sum(books_clean$pages <= 0, na.rm = TRUE))
 
 # Count books without reviews
 print(sum(books_clean$n_reviews == 0))
+
+
+# 2.13b Rating consistency check
+# Compare the reported average rating with the weighted average
+# implied by the star-rating proportions
+calculated_rating <- 5 * books_clean$star5 +
+                     4 * books_clean$star4 +
+                     3 * books_clean$star3 +
+                     2 * books_clean$star2 +
+                     1 * books_clean$star1
+
+rating_difference <- abs(books_clean$avg_reviews - calculated_rating)
+
+# Books for which both ratings are available
+valid_rating <- !is.na(rating_difference)
+print(sum(valid_rating))
+
+# Exploratory threshold: difference greater than 0.2
+rating_issue <- valid_rating & rating_difference > 0.2
+print(sum(rating_issue))
+print(round(100 * mean(rating_difference[valid_rating] > 0.2), 2))
+
+# Number of books with different levels of discrepancy
+print(sum(rating_difference > 0.5, na.rm = TRUE))
+print(sum(rating_difference > 1.0, na.rm = TRUE))
+
+# The 10 largest discrepancies
+rating_check <- data.frame(
+  avg_reviews = books_clean$avg_reviews,
+  n_reviews = books_clean$n_reviews,
+  calculated_rating = calculated_rating,
+  rating_difference = rating_difference
+)
+print(head(rating_check[order(-rating_check$rating_difference), ], 10))
+
+# Discrepancies by number of reviews
+review_group <- cut(
+  books_clean$n_reviews,
+  breaks = c(-1, 0, 5, 20, 100, Inf),
+  labels = c("0", "1-5", "6-20", "21-100", "100+")
+)
+print(table(review_group, rating_issue))
+
+# The flagged books are kept; this is documented as a data quality limitation
 
 
 # 2.14 Convert language to a factor
@@ -734,6 +797,33 @@ dev.off()
 # Books without reviews are excluded from the calculation.
 
 
+# 4.4b Boxplots of star rating proportions across books
+png(
+  "plots/star_variables_boxplots.png",
+  width = 10,
+  height = 6,
+  units = "in",
+  res = 150
+)
+
+boxplot(
+  books_clean[, star_vars],
+  names = c("5 Stars", "4 Stars", "3 Stars", "2 Stars", "1 Star"),
+  main = "Distribution of Star Rating Proportions Across Books",
+  xlab = "Star Rating",
+  ylab = "Proportion",
+  col = "lightblue",
+  border = "darkblue",
+  pch = 16,
+  cex = 0.6
+)
+
+dev.off()
+
+# Median proportion of each star category
+print(round(sapply(books_clean[, star_vars], median, na.rm = TRUE), 3))
+
+
 
 # 4.5 Scatterplot: Pages vs Price
 
@@ -745,6 +835,13 @@ cor_pages_price <- cor(
 )
 
 print(cor_pages_price)
+
+# Same correlation using log(1 + price)
+print(cor(
+  books_clean$pages,
+  log1p(books_clean$price),
+  use = "complete.obs"
+))
 
 # Fit a simple linear regression model
 model_pages_price <- lm(
@@ -910,6 +1007,8 @@ dev.off()
 
 ## 4.8 Variability, log transformations and correlation heatmap
 
+To analyse the variability of the variables, histograms of all numerical variables are constructed. Most variables are right-skewed; the only left-skewed variable is the average rating, which suggests that customers leave positive reviews more often than negative ones. The skewed variables are log-transformed with `log(1 + x)`. The `+ 1` is needed because `n_reviews` contains zeros (123 books without reviews). To see how the transformation affects the data, the numerical variables are plotted against the average rating before and after the transformation; the average rating was chosen as a possible response variable. Finally, a correlation heatmap of the main numerical variables is constructed.
+
 ```{r variability-correlation}
 # Ensure the plots directory exists
 if (!dir.exists("plots")) {
@@ -917,7 +1016,7 @@ if (!dir.exists("plots")) {
 }
 
 # 1. Plotting the histograms for understanding the variability of the data
-png("plots/histograms_grid.png", width = 10, height = 12, units = "in", res = 150)
+png("plots/histograms_for_the_variability_of_data.png", width = 10, height = 12, units = "in", res = 150)
 par(mfrow = c(3, 2), mar = c(4, 4, 2, 1)) # Optimized margins to prevent margin errors
 
 hist(books_clean$price, main = "Distribution of Price", xlab = "Price", col = "skyblue", border = "black")
@@ -993,7 +1092,7 @@ numeric_vars <- books_clean[, c("price", "pages", "n_reviews", "avg_reviews", "w
 cor_matrix <- cor(numeric_vars, use = "complete.obs")
 
 # Draw and save the correlation heatmap securely
-png("plots/correlation_matrix.png", width = 1200, height = 1200, res = 150)
+png("plots/correlation_matrix_basic.png", width = 1200, height = 1200, res = 150)
 
 corrplot(cor_matrix, 
          method = "color",       # Uses color blocks
@@ -1007,7 +1106,13 @@ corrplot(cor_matrix,
 
 dev.off()
 
+# Print the matrix (complete cases only: books with reviews and weight)
+print(round(cor_matrix, 2))
+print(sum(complete.cases(numeric_vars)))
+
 ```
+
+**Interpretation.** After the log transformation, the points are spread more evenly instead of being concentrated in the lower-left corner. In the heatmap, price and pages have a moderate positive correlation and pages and weight a strong one, which is expected because longer books need more material. The average rating shows correlations close to zero with all the other variables. Note that this heatmap uses only complete cases (books with reviews and a weight), so its price–pages coefficient differs slightly from the one computed on all available pairs.
 
 ## 4.9 Full correlation matrix and pairs plot
 
@@ -1035,14 +1140,22 @@ dev.off()
 file_path_pairs <- file.path(plots_dir, "pairwise_scatterplot_matrix.png")
 png(filename = file_path_pairs, width = 12, height = 12, units = "in", res = 150)
 
-pairs(books_numeric, 
+pairs(books_numeric,
       main = "Pairwise Scatter Plot Matrix of Amazon Books",
-      pch = 19, 
+      pch = 19,
       col = adjustcolor("blue", alpha.f = 0.4))
 
 dev.off()
 
 ```
+
+**Correlation matrix heatmap.** The heatmap shows the Pearson correlations among all numerical variables (pairwise complete observations).
+
+- *Price and pages:* moderate positive correlation (r = 0.44); longer books tend to be more expensive.
+- *Average rating and star proportions:* strong positive correlation with `star5` (r = 0.68) and negative correlations with lower ratings (`star3`: r = -0.49, `star4`: r = -0.40). This is mathematically expected, because the average rating is a weighted combination of the star proportions.
+- *Multicollinearity:* the correlations among the core explanatory variables (pages, price, n_reviews) are low.
+
+**Pairwise scatter plot matrix.** The plots involving `n_reviews` and `price` show strong right skewness, with most observations at low values, which supports the use of `log(1 + x)` transformations. The plots involving `star1`–`star5` show bounded, constrained patterns because the proportions of each reviewed book sum to one. The matrix also includes the log-transformed variables and both weight variables created earlier.
 
 ## 4.10 Distribution of every numeric variable
 
@@ -1055,9 +1168,9 @@ for (v in numeric_vars) {
   safe_v_name <- gsub("[^A-Za-z0-9_]", "_", v)
   file_path <- file.path(plots_dir, paste0("distribution_", safe_v_name, ".png"))
   
-  p <- ggplot(books_clean, aes_string(x = v)) +
-    geom_histogram(aes(y = ..density..), bins = 60, fill = "steelblue", color = "white", alpha = 0.7) +
-    geom_density(color = "darkred", size = 1) +
+  p <- ggplot(books_clean, aes(x = .data[[v]])) +
+    geom_histogram(aes(y = after_stat(density)), bins = 60, fill = "steelblue", color = "white", alpha = 0.7) +
+    geom_density(color = "darkred", linewidth = 1) +
     labs(title = paste("Distribution of", v),
          subtitle = "Histogram and Kernel Density Estimate",
          x = v, y = "Density") +
@@ -1074,8 +1187,26 @@ for (v in numeric_vars) {
   )
 }
 
+# 2. Price before and after the log(1 + price) transformation
+png("plots/price_vs_log_price_histograms.png",
+    width = 12, height = 5, units = "in", res = 150)
+par(mfrow = c(1, 2))
+
+hist(books_clean$price, main = "Distribution of Price",
+     xlab = "Price", col = "lightblue", breaks = 30)
+hist(log(1 + books_clean$price), main = "Distribution of log(1 + Price)",
+     xlab = "log(1 + Price)", col = "lightgreen", breaks = 30)
+
+par(mfrow = c(1, 1))
+dev.off()
 
 ```
+
+**Distribution of book prices.** Price is clearly right-skewed with a long right tail. Most books are priced roughly between 30 and 50, while a small number of specialised or academic titles reach 200 and beyond. This skewness justifies the `log(1 + price)` transformation, which reduces the influence of the most expensive books and makes the distribution more symmetric for the subsequent tests and regression.
+
+**Distribution of average ratings.** `avg_reviews` is left-skewed and bimodal. The main peak is around 4.5, and a second peak appears at exactly 5.0. The second peak is likely driven by books with only a few (exclusively positive) reviews; as the number of reviews grows, ratings tend to move towards about 4.5. Books with low average ratings (1.0–3.0) are rare.
+
+**Distribution of pages.** Page count is right-skewed. Most books have roughly 300–400 pages, while a smaller group of comprehensive works exceeds 1,000 pages. This asymmetry should be kept in mind when modelling price, since effects in the long tail are estimated from few books.
 
 ## 4.11 Star rating distributions
 
@@ -1087,8 +1218,8 @@ stars_long <- books_clean %>%
 
 # 2. Create faceted histograms with kernel density curves
 p <- ggplot(stars_long, aes(x = value, fill = variable)) +
-  geom_histogram(aes(y = ..density..), bins = 30, color = "white", alpha = 0.7) +
-  geom_density(color = "darkred", size = 1) +
+  geom_histogram(aes(y = after_stat(density)), bins = 30, color = "white", alpha = 0.7) +
+  geom_density(color = "darkred", linewidth = 1) +
   facet_wrap(~ variable, scales = "free") +
   labs(
     title = "Histograms and Density Curves of Star Ratings (star1 to star5)",
@@ -1115,6 +1246,14 @@ ggsave(
   dpi = 150
 )
 ```
+
+**Distribution of star rating proportions.**
+
+- `star5` is left-skewed, concentrated mainly between 0.60 and 0.85, with a spike at 1.0: some books have exclusively five-star reviews, typically books with few reviews.
+- `star4` is moderately right-skewed, mainly between 0.10 and 0.25, with a spike at 0.
+- `star3`, `star2` and `star1` are strongly right-skewed and concentrated at 0; the spike at zero becomes larger as the star level decreases.
+
+Customer ratings are therefore predominantly positive. Because the five proportions sum to one for every reviewed book, they are perfectly collinear and cannot all enter the same regression model; at least one category must be left out.
 
 ## 4.12 Key numeric variables
 
@@ -1240,7 +1379,7 @@ for (v in names(cat_df)) {
 }
 ```
 
-**Interpretation of the distributions.** Price and pages are right-skewed, which justifies using `log(1 + price)`. `avg_reviews` is left-skewed and bimodal: the main peak is near 4.5 and a second peak at 5.0 comes from books with only a few reviews. `star5` concentrates between 0.60 and 0.85, with a spike at 1.0. `star1` to `star3` are concentrated at 0. The star proportions sum to 1, so they are perfectly collinear and cannot all enter one regression.
+**Categorical variables.** 822 books (87.0%) have at least one review and 123 (13.0%) have none. Language is almost constant: 941 books are in English, one is in Spanish and 3 have no language recorded. Because language provides almost no variation between groups, it is not used in the hypothesis tests or the regression models.
 
 # 5. Hypothesis testing
 
@@ -1311,7 +1450,13 @@ ggsave(
 )
 ```
 
-**Result.** Pearson's test gives a significant positive correlation between pages and log price (r = 0.49, p < 2.2e-16), so H0 is rejected. Up to about 800 pages the OLS line and the LOESS curve agree. Above 1,000 pages the data are sparse, so the Nadaraya-Watson curve fluctuates there.
+**Result.** Pearson's test gives a significant positive correlation between pages and log price (r = 0.486, t = 16.94, df = 929, p < 2.2e-16, 95% CI 0.435–0.534), so H0 is rejected.
+
+- Up to about 800 pages, where most books lie, the OLS line, the LOESS curve and the Nadaraya–Watson estimator closely agree.
+- Above about 1,000 pages the data are sparse. The Nadaraya–Watson estimator is a local average, so there it follows individual books, producing sharp fluctuations and flat segments.
+- The LOESS curve is smoother, but its downward bend is also based on very few books; the OLS line extrapolates into a region with almost no data.
+
+Page count is positively associated with log price where most books lie; estimates for books above 1,000 pages are unreliable.
 
 ## Hypothesis 2: Price by review status
 
@@ -1358,7 +1503,7 @@ ggsave(
 
 ```
 
-**Result.** Welch's t-test shows a significant difference (t = 2.72, p = 0.007). Books without reviews have a higher mean log price (3.94 vs 3.78).
+**Result.** Welch's t-test shows a significant difference in mean log price (t = 2.74, df = 151.67, p = 0.007, 95% CI 0.046–0.286), so H0 is rejected at α = 0.01. Books without reviews have a higher mean log price (3.943) than books with reviews (3.777). The "With Reviews" group also shows more extreme high-price values. One possible explanation is that newly listed, unreviewed titles are offered at their full list price, while popular titles are discounted over time; the data do not allow this explanation to be tested directly.
 
 ## Hypothesis 3: Ratings by review engagement
 
@@ -1414,6 +1559,8 @@ ggsave(
 )
 ```
 
+**Result.** Within the 822 reviewed books, Welch's t-test finds a small significant difference (t = 2.01, df = 534.01, p = 0.045): the High Engagement group has a slightly higher mean rating (4.469 vs 4.413). The Wilcoxon rank-sum test, which does not assume normality and is less sensitive to the strong left skewness and low-rating outliers, is not significant (W = 83962, p = 0.889). The evidence that review volume is associated with different ratings is therefore not robust. These results should also be read in light of the rating consistency check (Step 2.13b).
+
 ## Hypothesis 4: Review volume vs price
 
 - **H0:** `n_reviews` is not correlated with log price.
@@ -1451,7 +1598,7 @@ ggsave(
 )
 ```
 
-**Result.** Spearman's test shows a weak negative correlation (rho = -0.16, p = 1.6e-6), so H0 is rejected. Books with more reviews tend to be cheaper.
+**Result.** Spearman's test shows a weak negative correlation (rho = -0.156, S = 161572930, p = 1.5e-6), so H0 is rejected. Books with more reviews tend to be cheaper.
 
 ## Hypothesis 5: Average rating vs price (quality premium)
 
@@ -1490,7 +1637,7 @@ ggsave(
 
 ```
 
-**Result.** rho = 0.02, p = 0.57, so H0 is not rejected. There is no quality premium.
+**Result.** Spearman's test gives rho = 0.020 (p = 0.572), so H0 is not rejected. In the plot, the OLS line is almost horizontal and the LOESS curve stays flat between 3.5 and 5.0 stars, where most books lie; its movement below 3.0 stars is based on very few books. Higher ratings are not associated with higher prices, so there is no evidence of a quality premium.
 
 # 6. Multivariate regression
 
@@ -1525,13 +1672,17 @@ par(mfrow = c(1, 1))
 dev.off()
 ```
 
-**Interpretation.** The model is significant overall (F = 127.6) and the adjusted R² is about 0.29.
+**Interpretation.** The model is significant overall (F(3, 927) = 127.7, p < 2.2e-16). R² = 0.292 and adjusted R² = 0.290, so about 29% of the variation in log price is explained.
 
-- **Pages:** positive effect, about +0.15% in price per extra page.
-- **has_reviews:** not significant once `log(1 + n_reviews)` is in the model.
-- **log(1 + n_reviews):** negative effect (about -0.072).
+- **Pages** (β = 0.001506, t = 18.98, p < 2e-16): holding the other variables constant, each extra page is associated with about 0.15% higher price.
+- **has_reviews** (β = 0.0041, t = 0.07, p = 0.946): not significant once `log(1 + n_reviews)` is in the model.
+- **log(1 + n_reviews)** (β = -0.0722, t = -6.77, p = 2.2e-11): a 1% increase in review count is associated with about 0.072% lower price.
 
-All VIF values are below 2, so multicollinearity is not a problem.
+All VIF values are below 2 (1.05, 1.65, 1.70), so multicollinearity is not a problem.
+
+About 71% of the variation remains unexplained. This is typical for cross-sectional pricing data, where price also depends on factors not in the dataset (publisher, binding type, author reputation, discounts).
+
+**Diagnostic plots.** The residuals are centred around zero with mild curvature (Residuals vs Fitted). They follow the normal line in the centre but deviate in the tails (Q-Q). The spread increases at higher fitted values (Scale-Location), suggesting heteroskedasticity. Some observations have relatively high leverage (Residuals vs Leverage). The OLS assumptions are therefore not fully satisfied, and the results should be interpreted with caution.
 
 ## 6.2 Models for average rating
 
@@ -1563,6 +1714,14 @@ for (model_name in names(model_formulas)) {
   cat("\n\n")
 }
 ```
+
+**Nested models for the average rating.**
+
+- *Model 1 (pages, price, n_reviews):* not significant (F(3, 807) = 2.046, p = 0.106, adjusted R² = 0.004). Book characteristics explain almost none of the variation in ratings.
+- *Model 2 (+ star5):* adjusted R² rises to 0.480.
+- *Model 3 (+ star5 and log(1 + star4)):* adjusted R² rises to 0.521, with all VIF values below 2.5.
+
+Adding `star3`, `star2` and `star1` is not possible without severe multicollinearity, because the proportions sum to one. **Important caveat:** the average rating is essentially a weighted average of the star proportions, so the high R² of Models 2 and 3 is largely mechanical and does not show that star proportions "explain" ratings in a substantive sense. The main finding is Model 1: book characteristics are not associated with ratings.
 
 ## 6.3 VIF chart
 
@@ -1601,8 +1760,24 @@ ggsave(filename = file_path_vif, plot = p_vif, width = 8, height = 5, units = "i
 
 # 7. Conclusions
 
-- **Page count is the main driver of price.**
-- **Books with more reviews tend to be cheaper.** This points to a mass-market discounting effect.
-- **Higher ratings do not come with higher prices.** There is no quality premium.
-- **Language was dropped.** Almost all books are in English.
+- **Page count is the strongest predictor of price.** It is positively associated with log price in the correlation test, in both non-parametric fits and in the regression (about +0.15% per page).
+- **Books with more reviews tend to be cheaper.** This holds in the Spearman test and in the regression. One possible explanation is that popular, mass-market titles are discounted more; the data cannot confirm this.
+- **Higher ratings do not come with higher prices.** There is no evidence of a quality premium (p = 0.57), and book characteristics explain almost none of the variation in ratings.
+- **Data quality.** One duplicate was removed, 10 implausible weights were excluded from the weight analysis, and 90 books show a discrepancy between the reported average rating and the star proportions; these were kept and documented.
+- **Language was dropped.** Almost all books are in English, so the variable provides no useful variation.
+- **Limitations.** The regression explains about 29% of price variation, and the diagnostic plots indicate non-normal residuals and heteroskedasticity, so the estimates should be interpreted with caution.
+
+# Appendix: Figures
+
+```{r show-figures, echo=FALSE, results="asis"}
+# Embed every PNG directly in the HTML (base64), so the file works on any computer
+fig_files <- list.files(plots_dir, pattern = "\\.png$", full.names = TRUE)
+
+for (f in fig_files) {
+  cat(sprintf(
+    '\n\n**%s**\n\n<img src="%s" style="max-width:85%%; display:block; margin:auto;">\n\n',
+    basename(f), knitr::image_uri(f)
+  ))
+}
+```
 

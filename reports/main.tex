@@ -7,6 +7,7 @@
 \usepackage{booktabs}
 \usepackage{float}
 \usepackage{hyperref}
+\hypersetup{hidelinks}
 % Improved academic report formatting
 \usepackage{lmodern}
 \usepackage{microtype}
@@ -39,14 +40,13 @@ DSC531 -- Statistical Simulation and Analysis}
 \maketitle
 \newpage
 \begin{abstract}
-This report presents an exploratory statistical analysis of the Amazon Data Science Books dataset using the R programming language. The objective is to examine the characteristics of data science books, assess data quality, summarize key numerical variables, and investigate relationships between book attributes and customer reviews. 
+This report presents a statistical analysis of the Amazon Data Science Books dataset using the R programming language. The objectives are to assess data quality, describe the main characteristics of the books, and investigate how book attributes relate to price and customer ratings.
 
-The original dataset contains 946 observations and 11 variables. During data cleaning, one duplicate observation was removed, missing values were examined, and book weights were converted into kilograms. Potential outliers were investigated using the interquartile range (IQR) method and additional weight-per-page checks. Ten potentially suspicious weight measurements were flagged for a separate sensitivity analysis without removing the corresponding books.
+The original dataset contains 946 observations and 11 variables. During data cleaning, one exact duplicate was removed, blank strings were converted to missing values, and book weights were converted into kilograms. Potential outliers were investigated using the interquartile range (IQR) method, and ten implausible weight measurements were identified using a weight-per-page check and excluded from the weight-specific analysis. A rating consistency check flagged 90 of the 822 reviewed books (10.95\%) whose reported average rating differs from the rating implied by the star proportions; these books were retained and documented as a data quality limitation.
 
-Descriptive statistics and graphical methods were used to explore the distributions of prices, page counts, ratings, review counts, and weights. The results indicate that review counts are highly right-skewed, while average customer ratings are generally concentrated toward the upper end of the rating scale. A moderate positive correlation was observed between page counts and prices (r = 0.444).
+Descriptive statistics and visualizations show that prices, page counts and review counts are right-skewed, while average ratings are concentrated near the upper end of the five-star scale. Five hypotheses were tested using Pearson and Spearman correlation tests, Welch's t-test and the Wilcoxon rank-sum test. Page count is positively correlated with log price ($r = 0.486$), books without reviews have a higher mean log price than books with reviews, and review volume is weakly negatively correlated with price ($\rho = -0.156$). No significant association was found between average rating and price, and the difference in ratings between high- and low-engagement books was not robust.
 
-Overall, the analysis demonstrates how data cleaning, descriptive statistics, and visualization can support the interpretation of real-world book data.
-
+A multiple linear regression for log price explains about 29\% of its variation, with page count as the strongest positive predictor and review volume as a negative predictor. Diagnostic plots indicate non-normal residuals and heteroskedasticity, so the regression results should be interpreted with caution.
 \end{abstract}
 \newpage
 \tableofcontents
@@ -56,11 +56,18 @@ Data analysis plays an important role in understanding patterns, identifying rel
 
 This report presents an exploratory statistical analysis of the Amazon Data Science Books dataset using the R programming language. The dataset contains information about books related to data science, including their prices, number of pages, average customer ratings, number of reviews, rating distributions, and physical weights.
 
-The primary objective of this study is to examine the characteristics of the dataset through data cleaning, descriptive statistics, and graphical visualization. Particular attention is given to identifying missing values, duplicate observations, potentially unusual measurements, and patterns within the numerical variables.
+The study has three objectives. First, to assess and improve data quality by identifying missing values, duplicate observations, inconsistent units, potential outliers and inconsistencies between rating variables. Second, to describe the distributions of the main variables using descriptive statistics and graphical methods. Third, to investigate relationships between book characteristics, prices and customer ratings using formal hypothesis tests and a multiple linear regression model.
 
-Additionally, the analysis investigates relationships between selected book characteristics, such as the association between the number of pages and price, the relationship between pages and physical weight, and the connection between customer ratings and review counts.
+In particular, the analysis addresses the following questions:
+\begin{itemize}
+    \item Are longer books more expensive?
+    \item Do books with and without customer reviews differ in price?
+    \item Do books with many reviews receive different ratings from books with few reviews?
+    \item Is the number of reviews associated with price?
+    \item Do higher-rated books command higher prices?
+\end{itemize}
 
-By combining statistical summaries with visual representations, this study aims to provide a clearer understanding of the dataset and demonstrate how exploratory data analysis can support informed interpretation of real-world information.
+The report is organized as follows. Section 2 describes the dataset and Section 3 the data cleaning process. Section 4 presents descriptive statistics and Section 5 the graphical analysis. Section 6 reports the hypothesis tests, Section 7 the regression model and its diagnostics, and Section 8 summarizes the main conclusions and limitations.
 \newpage
 \section{Dataset Description}
 \begingroup
@@ -134,23 +141,29 @@ allowing available information to be retained for
 subsequent analysis. Duplicate records and potentially
 unusual measurements were investigated during the
 cleaning process described in Section~\ref{sec:cleaning}.
+\endgroup
 \section{Data Cleaning}
 \label{sec:cleaning}
 \subsection{Data Cleaning Overview}
 
-Data cleaning was performed in R to improve data consistency
-while preserving as much information as possible. The procedures
-included handling missing values, removing duplicate observations,
+Data cleaning was performed in R to improve data consistency while preserving as much information as possible. The procedures included handling missing values, removing duplicate observations,
 standardizing weight measurements, investigating outliers,
 and validating customer review information.
 
+
 \subsection{Missing Values and Duplicate Observations}
 
-Blank strings in the weight and language variables were converted
-to \texttt{NA}. Missing values were handled using available-case
-calculations rather than deleting incomplete observations.
-One exact duplicate was identified and removed, reducing the
-dataset from 946 to 945 observations.
+Blank strings in the weight and language variables were converted to \texttt{NA}. Missing values were handled using available-case analysis rather than automatically removing incomplete observations, even when multiple values were missing from the same row.
+
+This approach allowed observations to contribute to
+analyses involving their available variables, minimizing
+unnecessary information loss. However, available-case
+analysis may introduce bias if missingness is systematic.
+
+One exact duplicate was identified and removed,
+reducing the dataset from 946 to 945 observations.
+
+
 
 \subsection{Weight Standardization}
 
@@ -204,11 +217,9 @@ Flagged observations & 10 \\
 \end{tabular}
 \caption{Criteria for Flagging Suspicious Weight Measurements}
 \label{tab:weightcriteria}
-\end{table}
+\end{table} 
 The flagged measurements were not confirmed data errors.
-Therefore, the corresponding books were retained in the
-cleaned dataset. For weight-specific sensitivity analysis,
-a separate variable, \texttt{weight\_analysis}, was created
+Therefore, the corresponding books were retained in the cleaned dataset. For weight-specific sensitivity analysis, a separate variable, \texttt{weight\_analysis}, was created
 by replacing the 10 flagged weight values with \texttt{NA}.
 
 The mean weight decreased from approximately 0.778 kg to
@@ -221,7 +232,7 @@ interpreted cautiously rather than as independent
 evidence of a stronger underlying relationship. The corresponding scatterplots are presented in Figure~\ref{fig:pagesweight}.
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.85\textwidth]{plots/4_6_pages_vs_weight.png}
+    \includegraphics[width=0.95\textwidth]{plots/4_6_pages_vs_weight.png}
     \caption{Relationship Between Page Count and Book Weight Before and After Filtering Suspicious Measurements}
     \label{fig:pagesweight}
 \end{figure}
@@ -242,6 +253,7 @@ cautiously because the filtering criterion itself
 depends on the weight-to-page ratio.
 
 \subsection{Review Data Consistency}
+
 Customer review information was examined to identify
 inconsistencies between review counts, average ratings,
 and star-rating proportions.
@@ -257,10 +269,44 @@ determine whether their sum was approximately equal
 to one. No observations exceeded a tolerance of
 0.05 from the expected total.
 
-These checks helped ensure that the review-related
-variables were internally consistent before
-subsequent statistical analysis.
+An additional consistency check compared the reported
+average rating with the weighted average calculated
+from the star-rating proportions:
+\[
+R_{\mathrm{calculated}}
+= 5s_5 + 4s_4 + 3s_3 + 2s_2 + s_1
+\]
+where $s_k$ represents the proportion of
+$k$-star ratings.
+The absolute difference was calculated as:
+\[
+D = |R_{\mathrm{reported}} - R_{\mathrm{calculated}}|
+\]
+Using an exploratory threshold of $D > 0.2$,
+90 out of 822 books (10.95\%) were flagged
+for potential rating inconsistencies.
 
+These discrepancies were concentrated among
+books with relatively few customer reviews.
+Some differences exceeded what would ordinarily
+be expected from rounding. However, the available
+data do not confirm whether the reported average
+ratings and star-rating proportions refer to
+identical sets of customer evaluations.
+
+Since the available data did not establish
+which rating measure was more reliable,
+the flagged observations were retained
+without modification.
+
+Although the star-rating proportions generally
+summed to one, this additional check revealed
+potential inconsistencies between the reported
+average ratings and rating distributions.
+These should be considered when interpreting
+rating-related statistical analyses.
+
+\newpage
 \subsection{Final Cleaned Dataset}
 
 After data cleaning, the dataset contained 945 observations,
@@ -287,6 +333,7 @@ Duplicate observations removed & 1 \\
 Available weight measurements & 942 \\
 Weight values used in sensitivity analysis & 932 \\
 Flagged suspicious weights & 10 \\
+Potential rating inconsistencies & 90 \\
 \bottomrule
 \end{tabular}
 \caption{Summary of the Final Cleaned Dataset}
@@ -490,38 +537,35 @@ alone does not establish that the transformed data
 follow a normal distribution.
 \newpage
 \subsection{Log-Transformed Variables and Average Customer Ratings}
-First, to analyse the variability of the variables we will construct histograms of all numerical variables. It can be seen that most of the variables are heavily right-skewed. The only variable that is left-skewed is average reviews. So it seems that people tend to leave positive reviews more often than negative ones.
-
-To transform the skewed variables we will use log transformation. All the variables are positive so we will not meet any problems here. Log transformation is an important step which can help for the future model building and hypothesis testing.
+To prepare the variables for the transformation, their distributions were first examined using the original weight measurements (\texttt{weight\_kg}), including the ten potentially suspicious values (Figure~\ref{fig:valeria_histograms}). Compared with Figure~\ref{fig:histograms}, which uses the filtered weights, the weight distribution is much more strongly right-skewed because of a few extreme measurements.
 
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.95\textwidth]{plots/histograms_for_the_variability_of_data.png}
-    \caption{Distributions of Price, Page Count, Review Count, Average Customer Ratings, and Book Weight}
+    \caption{Distributions of Price, Page Count, Review Count, Average Customer Ratings, and Original Book Weight}
     \label{fig:valeria_histograms}
 \end{figure}
-Figure~\ref{fig:valeria_histograms} presents the distributions of the five numerical variables. Price, page count, review count, and weight exhibit right-skewed distributions, whereas average customer ratings are concentrated near the upper end of the rating scale.
 
-To see how transformation influenced the data we will plot all the numerical variables against average reviews and then their log transformed versions. Average reviews were chosen as a possible variable for prediction in the future.
+Price, page count, review count and weight are right-skewed, while the average customer rating is the only left-skewed variable, indicating that customers tend to leave positive rather than negative reviews.
+
+To reduce the skewness, the variables were transformed using $\log(1 + x)$. Adding one is necessary because \texttt{n\_reviews} contains zero values (123 books without reviews), for which $\log(0)$ is undefined. Such transformations can also be useful for subsequent hypothesis testing and model building.
+
+To examine the effect of the transformation, the numerical variables were plotted against the average customer rating, first in their original form (Figure~\ref{fig:original_scatterplots}) and then after the log transformation (Figure~\ref{fig:log_scatterplots}). The average rating was chosen as a candidate response variable.
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.85\textwidth]{plots/scatterplots_original.png}
+    \includegraphics[width=0.75\textwidth]{plots/scatterplots_original.png}
     \caption{Original Numerical Variables versus Average Customer Ratings}
     \label{fig:original_scatterplots}
 \end{figure}
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.85\textwidth]{plots/scatterplots_log_transformed.png}
+    \includegraphics[width=0.75\textwidth]{plots/scatterplots_log_transformed.png}
     \caption{Log-Transformed Numerical Variables versus Average Customer Ratings}
     \label{fig:log_scatterplots}
 \end{figure}
 
-\begin{samepage}
-The log-transformed variables show a more balanced
-spread of observations, making their relationships
-with average customer ratings easier to examine.
-\end{samepage}
+In the original scale, most observations are concentrated in the lower-left part of each plot because of a few extreme values. After the log transformation, the observations are spread more evenly, which makes the relationships with the average rating easier to examine. In both versions, no clear linear pattern between the average rating and price, pages, review count or weight is visible, which is consistent with the near-zero correlations reported in Section~\ref{sec:heatmap}.
 
 \newpage
 \subsection{Star Rating Distribution}
@@ -644,7 +688,11 @@ between the number of pages and book price.
 
 The scatterplot indicates a moderate positive relationship
 between page count and price, with a Pearson correlation
-coefficient of approximately 0.444.
+coefficient of approximately 0.444 (931 books with both
+values available). Using the log-transformed price,
+$\log(1 + \text{price})$, the correlation increases to 0.486,
+which is the version tested formally in Hypothesis 1
+(Section 6.1).
 
 This suggests that books with more pages tend to be more
 expensive. However, considerable variation in price remains
@@ -657,6 +705,7 @@ The relationship between page count and book weight
 was examined separately in Section~\ref{sec:cleaning},
 where the effect of potentially suspicious weight
 measurements was also investigated.
+\newpage
 \subsection{Customer Reviews and Ratings}
 
 A scatterplot was also used to examine the relationship
@@ -692,6 +741,7 @@ in this dataset.
 
 \newpage
 \subsection{Correlation Matrix Heatmap}
+\label{sec:heatmap}
 To analyse the correlations between the main numerical
 variables, a Pearson correlation matrix was constructed
 using price, pages, number of reviews, average customer
@@ -702,7 +752,15 @@ ratings, and book weight.
     \caption{Correlation Matrix of Price, Pages, Review Counts, Average Ratings, and Weight}
     \label{fig:correlation_basic}
 \end{figure}
-According to Figure~\ref{fig:correlation_basic}, price and number of pages have a moderate positive correlation ($r = 0.49$). This may be explained by the fact that larger books require more physical materials.
+The matrix was computed using only the 811 books with
+complete information on all five variables, that is,
+books with at least one review and an available weight.
+For this subset, the correlation between price and page
+count is $r = 0.49$, slightly higher than the value of
+0.444 obtained in Section 5.6 using all 931 books with
+available price and page count. In both cases the
+relationship is moderate and positive, which is consistent
+with longer books requiring more material.
 
 A positive correlation is also observed between price and weight ($r = 0.34$), while pages and weight show a stronger positive correlation ($r = 0.57$).
 
@@ -713,14 +771,16 @@ book characteristics have very weak linear associations
 with average customer ratings.
 
 To extend this analysis, the following correlation
-matrix includes the individual star-rating proportions.
+matrix includes all numerical variables, including the
+individual star-rating proportions, both weight
+variables and the log-transformed variables.
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.95\textwidth]{plots/correlation_matrix_heatmap.png}
     \caption{Pearson Correlation Matrix of Numerical Variables}
     \label{fig:correlationheatmap}
 \end{figure}
-Figure~\ref{fig:correlationheatmap} shows a moderate positive correlation between book price and page count ($r \approx 0.44$), consistent with the corresponding scatterplot.
+Figure~\ref{fig:correlationheatmap} uses pairwise complete observations, so each coefficient is based on all books with both values available. It shows a moderate positive correlation between book price and page count ($r \approx 0.44$), consistent with the corresponding scatterplot.
 
 Average customer ratings show a strong positive correlation with the proportion of five-star reviews ($r \approx 0.68$). Conversely, the proportion of five-star reviews is negatively
 correlated with four-star ($r \approx -0.74$) and three-star ($r \approx -0.65$) review proportions.
@@ -737,15 +797,18 @@ Overall, the heatmap provides a broader view of the linear
 relationships within the dataset, complementing the more
 detailed scatterplot analysis.
 
-
+\newpage
 \subsection{Pairwise Scatter Plot Matrix}
 A pairwise scatter plot matrix was used to explore
-relationships among the main numerical variables,
-including price, page count, average customer rating,
-review count, and star-rating proportions.
+relationships among all numerical variables of the
+cleaned dataset: price, page count, average customer
+rating, review count, the five star-rating proportions,
+the original and filtered weights, and the
+log-transformed price, page count, review count and
+weight.
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.95\textwidth]
+    \includegraphics[width=0.80\textwidth]
     {plots/pairwise_scatterplot_matrix.png}
     \caption{Pairwise Scatter Plot Matrix of Amazon Books}
     \label{fig:pairs_plot}
@@ -766,7 +829,10 @@ complements the correlation heatmap by providing
 a visual overview of the relationships, clusters,
 and potential outliers in the dataset.
 
-
+Because each log-transformed variable is a monotonic
+function of its original variable, the corresponding
+panels show near-perfect relationships by construction
+and should not be interpreted as substantive findings.
 \subsection{Categorical Analysis}
 Categorical variables were examined to investigate
 the distribution of customer review availability
@@ -774,7 +840,7 @@ and book languages.
 
 Two bar charts were used to visualize the
 frequency counts of the variables
-\texttt{has\_reviews} and \texttt{language\_clean}.
+\texttt{has\_reviews} and \texttt{language}.
 \begin{figure}[H]
     \centering
 
@@ -789,9 +855,9 @@ frequency counts of the variables
     \begin{subfigure}[b]{0.48\textwidth}
         \centering
         \includegraphics[width=\textwidth]
-        {plots/categorical_bar_language_clean.png}
+        {plots/categorical_bar_language.png}
         \caption{Distribution of Book Languages}
-        \label{fig:bar_language_clean}
+        \label{fig:bar_language}
     \end{subfigure}
 
     \caption{Categorical Breakdown of Review
@@ -815,19 +881,15 @@ information for these observations.
 
 \subsubsection*{Distribution of Book Languages}
 
-The distribution of book languages shows that
-English is the predominant language in the
-dataset, while other languages are represented
-by relatively few observations.
+English is almost the only language in the dataset:
+941 books (approximately 99.6\%) are in English,
+one book is in Spanish, and the language is missing
+for 3 books.
 
-This imbalance indicates that the dataset
-primarily reflects English-language
-data science books.
-
-Consequently, comparisons between language
-categories should be interpreted cautiously,
-particularly when some categories contain
-very few books.
+Because the variable has almost no variation, it
+cannot support meaningful comparisons between
+language groups and was therefore excluded from
+the subsequent statistical analysis.
 
 Overall, the categorical analysis complements
 the numerical exploration by highlighting
@@ -847,80 +909,87 @@ To formally evaluate the underlying relationships and market dynamics prior to e
 \subsection{Hypothesis 1: The Effect of Page Count on Book Price and Non-Parametric Modeling}
 
 \begin{itemize}
-    \item \textbf{Null Hypothesis ($H_0$):} There is no correlation between the number of pages (\texttt{pages}) and the log-transformed book price ($\beta = 0$).
+    \item \textbf{Null Hypothesis ($H_0$):} There is no linear correlation between the number of pages (\texttt{pages}) and the log-transformed book price ($\rho = 0$).
 
-    \item \textbf{Alternative Hypothesis ($H_1$):} Book page count is significantly correlated with price ($\beta \neq 0$).
+    \item \textbf{Alternative Hypothesis ($H_1$):} Page count is linearly correlated with the log-transformed book price ($\rho \neq 0$).
 \end{itemize}
 
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.85\textwidth]{plots/hypothesis_1_price_pages.png}
-    \caption{Hypothesis 1: Comparison of Parametric (OLS) and Non-Parametric Estimators}
+    \caption{Hypothesis 1: Comparison of Parametric (OLS) and Non-Parametric (LOESS and Nadaraya--Watson) Estimators}
     \label{fig:h1_plot}
 \end{figure}
+
 \subsubsection*{Empirical Results and Statistical Testing}
-The Pearson product-moment correlation test revealed a statistically significant positive relationship between page count and $\log(1 + \text{price})$, yielding a correlation coefficient of $r = 0.4862$ ($t = 16.95, df = 928, p < 2.2 \times 10^{-16}$) with a 95\% confidence interval ranging from $0.4355$ to $0.5338$. To accommodate zero values, the transformation \(\log(1+x)\) can be used where appropriate.
-
+The Pearson product-moment correlation test revealed a statistically significant positive relationship between page count and $\log(1 + \text{price})$, with a correlation coefficient of $r = 0.4859$ ($t = 16.944$, $df = 929$, $p < 2.2 \times 10^{-16}$) and a 95\% confidence interval from $0.4352$ to $0.5335$. Therefore, the null hypothesis is rejected.
+\newpage
 \subsubsection*{Graph Interpretation and Non-Parametric Benchmarking}
-Evaluating the comparative estimator graph (OLS linear vs. LOESS vs. Nadaraya--Watson) reveals distinct structural behaviors across the distribution:
 \begin{itemize}
-    \item In the primary density region (from 0 to approximately 800 pages), the parametric OLS trend line and the non-parametric LOESS curve closely align, corroborating a stable positive association between physical volume and retail pricing.
+    \item In the region containing most observations (approximately 0--800 pages), the OLS line, the LOESS curve and the Nadaraya--Watson estimator closely agree, supporting a positive association between page count and log price.
 
-    \item In the right-tail boundary region (exceeding 1,000 pages), the Nadaraya--Watson kernel regression exhibits severe boundary bias and local fluctuations due to data sparsity.
+    \item Above approximately 1{,}000 pages the data are sparse. Because the Nadaraya--Watson estimator is a local weighted average, it follows individual books in this region, producing sharp fluctuations and flat segments where no observations are nearby.
 
-    \item Conversely, the LOESS (local polynomial regression) estimator provides a robust, smooth trajectory that successfully handles boundary effects without imposing strict global linearity, while the linear OLS tends to extrapolate upward in the sparse tail.
+    \item The LOESS curve is smoother in this region, but its downward bend is also based on very few books. The OLS line extrapolates the linear trend into a region with almost no data.
 \end{itemize}
 
-\paragraph{Methodological Conclusion:} The empirical evidence confirms that physical volume (scaling of material and production costs) exerts a tangible upward pressure on retail pricing, validating pages as a core structural predictor while robustly controlling for non-linearities and boundary constraints.
+\noindent\textbf{Conclusion:} Page count is positively associated with log price across the range where most books lie. Estimates for very long books (more than 1{,}000 pages) are unreliable because of data sparsity. As this is an observational association, it does not establish that additional pages cause higher prices.
 
-
+\newpage
 \subsection{Hypothesis 2: Price Differentiation Based on Review Engagement}
-
 \begin{itemize}
     \item \textbf{Null Hypothesis ($H_0$):} The mean log-price of books without reviews (\texttt{No Reviews}) is equal to the mean log-price of books with active reviews (\texttt{With Reviews}).
 
     \item \textbf{Alternative Hypothesis ($H_1$):} There is a statistically significant difference in mean pricing between reviewed and unreviewed titles.
 \end{itemize}
 
-\begin{figure}[htbp]
+\begin{figure}[H]
     \centering
-    \includegraphics[width=0.85\textwidth]{plots/hypothesis_2_price_reviews.png}
+    \includegraphics[width=0.75\textwidth]{plots/hypothesis_2_price_reviews.png}
     \caption{Hypothesis 2: Price Comparison by Review Engagement Status}
     \label{fig:h2_plot}
 \end{figure}
-
 \subsubsection*{Empirical Results and Group Estimates}
 
-A Welch two-sample t-test was conducted on $\log(1 + \text{price})$ to evaluate pricing disparities while controlling for variance heterogeneity. Results demonstrate a statistically significant difference in means ($t = 2.7169, df = 149.93, p = 0.007365$). The 95\% confidence interval ranges from $0.04539$ to $0.28747$, rejecting the null hypothesis at $\alpha = 0.01$.
+A Welch two-sample t-test was conducted on $\log(1 + \text{price})$ to compare the two groups without assuming equal variances. The results show a statistically significant difference in means ($t = 2.7354$, $df = 151.67$, $p = 0.006973$). The 95\% confidence interval for the difference ranges from $0.04620$ to $0.28648$, so the null hypothesis is rejected at $\alpha = 0.01$.
 
 \begin{itemize}
-    \item \textbf{No Reviews Group:} Mean $\log(1 + \text{price}) = 3.943155$.
+    \item \textbf{No Reviews Group:} Mean $\log(1 + \text{price}) = 3.943061$.
 
     \item \textbf{With Reviews Group:} Mean $\log(1 + \text{price}) = 3.776725$.
 \end{itemize}
 
-\paragraph{Economic Interpretation:} Unreviewed or newly listed titles carry higher baseline list prices. This aligns with pricing lifecycle strategies in e-commerce: unreviewed products often launch at premium list prices, whereas products with high consumer engagement undergo competitive discounting or promotional adjustments over time.
+\paragraph{Interpretation:} Books without reviews have a higher average log price than books with reviews. One possible explanation is that newly listed titles, which have not yet received reviews, are offered at their full list price, while popular titles are discounted over time. However, the dataset does not contain information on listing dates or discounts, so this explanation cannot be tested directly.
 
+\newpage
+\subsection{Hypothesis 3: Variance in Ratings Across Review Engagement Levels}
 
-\subsection{Hypothesis 3: Variance in Ratings Across Publication Languages}
+Because the average rating variable (\texttt{avg\_reviews}) is structurally missing (\texttt{NA}) for books with zero reviews, a direct comparison between unreviewed and reviewed books is unfeasible. Therefore, Hypothesis 3 evaluates rating dynamics within the subsample of reviewed books ($N = 822$), splitting them into High Engagement and Low Engagement categories based on the median review count.
 
 \begin{itemize}
-    \item \textbf{Null Hypothesis ($H_0$):} The mean average review rating (\texttt{avg\_reviews}) does not differ significantly across language categories.
+    \item \textbf{Null Hypothesis ($H_0$):} The mean average review rating (\texttt{avg\_reviews}) does not differ significantly between books with high and low review engagement.
 
-    \item \textbf{Alternative Hypothesis ($H_1$):} Review ratings vary significantly across publication languages.
+    \item \textbf{Alternative Hypothesis ($H_1$):} Books with high review engagement exhibit significantly different average ratings compared to those with low engagement.
 \end{itemize}
 
-\begin{figure}[htbp]
+\begin{figure}[H]
     \centering
-    \includegraphics[width=0.85\textwidth]{plots/hypothesis_3_ratings_languages.png}
-    \caption{Hypothesis 3: Average Ratings Across Language Categories}
+    \includegraphics[width=0.75\textwidth]{plots/hypothesis_3_ratings_engagement.png}
+    \caption{Hypothesis 3: Average Ratings Across Review Engagement Levels}
     \label{fig:h3_plot}
 \end{figure}
 
 \subsubsection*{Empirical Results and Methodological Conclusion}
 
-Parametric ANOVA revealed a marginally significant effect ($F = 3.734, df = 2, p = 0.0243$). However, the non-parametric Kruskal-Wallis test yielded a non-significant result ($\chi^2 = 4.4508, df = 2, p = 0.108$). Because the non-parametric test fails to reject the null hypothesis, we conclude that publication language does not exert a robust systematic effect on average ratings once distributional asymmetries are controlled for.
+The parametric Welch two-sample $t$-test indicates a statistically significant difference in mean ratings between engagement groups ($t = 2.008, df = 534.01, p = 0.0452$), with the High Engagement group exhibiting a slightly higher mean rating ($\bar{x} = 4.469$) compared to the Low Engagement group ($\bar{x} = 4.413$). 
 
+However, the non-parametric Wilcoxon rank-sum test yields a non-significant result ($W = 83962, p = 0.8886$). Because the non-parametric test accounts for the severe negative skewness and extreme low-rating outliers in the distribution (particularly present in the Low Engagement subsample), we conclude that engagement volume does not exert a robust, distribution-free effect on book ratings once non-normality is controlled for.
+
+These findings should also be interpreted in light
+of the rating consistency check, which identified
+potential discrepancies between reported average
+ratings and star-rating proportions. No observations
+were excluded solely on this basis.
 
 \subsection{Hypothesis 4: Review Volume vs. Book Pricing Dynamics}
 
@@ -930,7 +999,7 @@ Parametric ANOVA revealed a marginally significant effect ($F = 3.734, df = 2, p
     \item \textbf{Alternative Hypothesis ($H_1$):} There is a statistically significant monotonic correlation between review volume and book price.
 \end{itemize}
 
-\begin{figure}[htbp]
+\begin{figure}[H]
     \centering
     \includegraphics[width=0.85\textwidth]{plots/hypothesis_4_reviews_price.png}
     \caption{Hypothesis 4: Relationship Between Review Volume and Book Price}
@@ -939,11 +1008,11 @@ Parametric ANOVA revealed a marginally significant effect ($F = 3.734, df = 2, p
 
 \subsubsection*{Empirical Results and Statistical Testing}
 
-The Spearman rank correlation test revealed a statistically significant negative association between the number of customer reviews and log-transformed book price ($\rho = -0.1554$, $S = 160966486$, $p = 1.647 \times 10^{-6}$).
+The Spearman rank correlation test revealed a statistically significant negative association between the number of customer reviews and log-transformed book price ($\rho = -0.1561$, $S = 161572930$, $p = 1.465 \times 10^{-6}$).
 
 The null hypothesis is rejected, indicating a weak but statistically significant negative monotonic relationship between review volume and book price.
 
-
+\newpage
 \subsection{Hypothesis 5: Average Customer Rating vs. Book Price}
 
 \begin{itemize}
@@ -964,6 +1033,11 @@ The null hypothesis is rejected, indicating a weak but statistically significant
 The Spearman rank correlation test revealed a negligible positive association between average customer ratings and log-transformed book price ($\rho = 0.01974$, $p = 0.5723$).
 
 Since the p-value exceeds the conventional significance level of $\alpha = 0.05$, the null hypothesis cannot be rejected. The empirical findings suggest that average customer ratings do not exhibit a statistically significant monotonic association with book price.
+
+This result should be interpreted cautiously because
+the rating consistency check identified potential
+discrepancies in 90 observations. These observations
+were retained in the analysis.
 
 % ==========================================
 % 7. MULTIVARIATE MODELING
@@ -996,11 +1070,11 @@ where $\beta_0$ represents the intercept, $\beta_1$, $\beta_2$, and $\beta_3$ re
 
 \subsection{Empirical Regression Results}
 
-The estimated model was statistically significant, with an overall F-statistic of $F(3,926)=127.6$ and a p-value below $2.2 \times 10^{-16}$.
+The estimated model was statistically significant, with an overall F-statistic of $F(3,927)=127.7$ and a p-value below $2.2 \times 10^{-16}$. The model was estimated on 931 books with complete information on all variables.
 
 The model achieved an $R^2$ of approximately $0.2924$ and an adjusted $R^2$ of $0.2901$, indicating that approximately 29\% of the variation in log-transformed book prices is explained by the included predictors.
 
-\begin{table}[htbp]
+\begin{table}[H]
 \centering
 \caption{OLS Regression Results}
 \label{tab:ols_results}
@@ -1008,26 +1082,27 @@ The model achieved an $R^2$ of approximately $0.2924$ and an adjusted $R^2$ of $
 \toprule
 Variable & Coefficient & t-value & p-value \\
 \midrule
-Pages & 0.001507 & 18.976 & $< 2 \times 10^{-16}$ \\
-Has Reviews & 0.005236 & 0.086 & 0.931 \\
-Log Review Count & -0.072204 & -6.771 & $2.27 \times 10^{-11}$ \\
+Pages & 0.001506 & 18.984 & $< 2 \times 10^{-16}$ \\
+Has Reviews & 0.004104 & 0.068 & 0.946 \\
+Log Review Count & -0.072200 & -6.774 & $2.23 \times 10^{-11}$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \subsection{Interpretation of Regression Coefficients}
+The page count coefficient is positive and highly statistically significant ($\beta_1=0.001506$, $p<0.001$). Holding the other variables constant, each additional page is associated with approximately $0.15\%$ higher price.
 
-The page count coefficient is positive and highly statistically significant ($\beta_1=0.001507$, $p<0.001$), suggesting that longer books tend to have higher prices, holding the other included variables constant.
+The review availability indicator is not statistically significant ($\beta_2=0.004104$, $p=0.946$), suggesting that the presence of reviews does not explain price differences once page count and review volume are taken into account.
 
-The review availability indicator is not statistically significant ($\beta_2=0.005236$, $p=0.931$), suggesting that the presence of reviews does not independently explain price differences after controlling for page count and review volume.
+Log-transformed review volume has a statistically significant negative coefficient ($\beta_3=-0.0722$, $p<0.001$). Holding page count constant, a $1\%$ increase in the number of reviews is associated with approximately $0.072\%$ lower price.
 
-Conversely, log-transformed review volume exhibits a statistically significant negative coefficient ($\beta_3=-0.072204$, $p<0.001$), indicating that books with greater review engagement tend to have lower prices, conditional on the other variables.
-
+The model explains about 29\% of the variation in log price. The remaining variation is likely related to factors not available in the dataset, such as the publisher, binding type, author reputation and discounts.
+\newpage
 \subsection{Multicollinearity Assessment}
 
 Variance Inflation Factors (VIF) were calculated to evaluate potential multicollinearity among the independent variables.
 
-\begin{table}[htbp]
+\begin{table}[H]
 \centering
 \caption{Variance Inflation Factors}
 \label{tab:vif_results}
@@ -1035,9 +1110,9 @@ Variance Inflation Factors (VIF) were calculated to evaluate potential multicoll
 \toprule
 Predictor & VIF \\
 \midrule
-Pages & 1.0458 \\
-Has Reviews & 1.6429 \\
-Log Review Count & 1.6967 \\
+Pages & 1.0461 \\
+Has Reviews & 1.6475 \\
+Log Review Count & 1.7016 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -1085,5 +1160,79 @@ assumptions may not be fully satisfied. Consequently,
 the regression results should be interpreted with
 appropriate caution.
 
-\end{document}
+\newpage
+\section{Conclusion}
+\begingroup
+\setstretch{1.0}
+\setlength{\parskip}{4pt}
 
+\subsection{Summary of Findings}
+
+This report analysed 946 Amazon data science books, of which 945 were retained after removing one duplicate. No books were removed because of extreme or missing values; missing values were handled using available-case analysis, and ten implausible weights were excluded only from the weight-specific analysis. The main findings are:
+
+\begin{itemize}
+    \setlength{\itemsep}{2pt}
+    \item \textbf{Page count is the strongest predictor of price.} It is positively correlated with log price ($r = 0.486$, $p < 2.2 \times 10^{-16}$) and remains significant in the regression, where each additional page is associated with approximately 0.15\% higher price. The relationship is uncertain for books above about 1{,}000 pages, where data are sparse.
+
+    \item \textbf{Books with more reviews tend to be cheaper.} Books without reviews have a higher mean log price ($p = 0.007$), and review volume is weakly negatively correlated with price ($\rho = -0.156$, $p < 0.001$). In the regression, the number of reviews remains significant, while the presence of reviews does not.
+
+    \item \textbf{Ratings are not related to price.} No significant association was found ($\rho = 0.020$, $p = 0.572$), so there is no evidence of a quality premium.
+
+    \item \textbf{Ratings do not differ robustly by review volume.} Welch's t-test suggested a small difference ($p = 0.045$), but the Wilcoxon test did not ($p = 0.889$).
+
+    \item \textbf{Customer ratings are predominantly positive.} On average, about 72\% of each book's ratings are five-star ratings.
+\end{itemize}
+
+\subsection{Limitations and Possible Extensions}
+
+\begin{itemize}
+    \setlength{\itemsep}{2pt}
+    \item The analysis is observational, so the associations cannot be interpreted as causal effects.
+    \item The rating consistency check flagged 90 books, mainly with few reviews, whose reported rating differs from the one implied by the star proportions. They were retained, which may affect rating-related results.
+    \item The regression explains about 29\% of the variation in log price; factors such as publisher, binding type, author and discounts are not available.
+    \item The diagnostic plots indicate non-normal residuals and heteroskedasticity, so the regression p-values should be interpreted with caution.
+    \item Almost all books are in English, so the effect of language could not be studied.
+\end{itemize}
+
+Future work could use heteroskedasticity-robust standard errors, include variables such as publisher or publication date, and model non-linear effects of page count on price.
+
+\endgroup
+
+\newpage
+\begin{thebibliography}{99}
+\addcontentsline{toc}{section}{References}
+\bibitem{dataset}
+Amazon Data Science Books dataset (\texttt{Amazon\_Data\_Science\_Books.csv}), 946 observations and 11 variables. Provided by the course instructor for DSC531 -- Statistical Simulation and Analysis, University of Cyprus.
+
+\bibitem{R}
+R Core Team (2026). \textit{R: A Language and Environment for Statistical Computing}, version 4.6.1. R Foundation for Statistical Computing, Vienna, Austria. \url{https://www.R-project.org/}
+
+\bibitem{tidyverse}
+Wickham, H., Averick, M., Bryan, J., Chang, W., McGowan, L. D., Fran\c{c}ois, R., et al. (2019). Welcome to the tidyverse. \textit{Journal of Open Source Software}, 4(43), 1686.
+
+\bibitem{corrplot}
+Wei, T. and Simko, V. (2024). \textit{R package `corrplot': Visualization of a Correlation Matrix}, version 0.95. \url{https://github.com/taiyun/corrplot}
+
+\bibitem{car}
+Fox, J. and Weisberg, S. (2019). \textit{An R Companion to Applied Regression}, 3rd edition. Sage, Thousand Oaks, CA.
+
+\bibitem{rmarkdown}
+Xie, Y., Allaire, J. J. and Grolemund, G. (2018). \textit{R Markdown: The Definitive Guide}. Chapman and Hall/CRC.
+
+\bibitem{tukey}
+Tukey, J. W. (1977). \textit{Exploratory Data Analysis}. Addison-Wesley, Reading, MA.
+
+\bibitem{welch}
+Welch, B. L. (1947). The generalization of `Student's' problem when several different population variances are involved. \textit{Biometrika}, 34(1--2), 28--35.
+
+\bibitem{cleveland}
+Cleveland, W. S. (1979). Robust locally weighted regression and smoothing scatterplots. \textit{Journal of the American Statistical Association}, 74(368), 829--836.
+
+\bibitem{nadaraya}
+Nadaraya, E. A. (1964). On estimating regression. \textit{Theory of Probability and Its Applications}, 9(1), 141--142.
+
+\bibitem{watson}
+Watson, G. S. (1964). Smooth regression analysis. \textit{Sankhy\=a: The Indian Journal of Statistics, Series A}, 26(4), 359--372.
+
+\end{thebibliography}
+\end{document}
