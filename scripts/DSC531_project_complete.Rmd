@@ -403,6 +403,8 @@ print(cor_filtered)
 
 # Remove language because it has very low variability
 # The language distribution was already examined in Step 2.14
+# Keep a copy of language for the categorical bar chart (Section 4.14)
+language_for_plot <- books_clean$language
 books_clean$language <- NULL
 
 # Remove the original text weight variable
@@ -1197,17 +1199,28 @@ ggsave(
 ## 4.14 Categorical variables
 
 ```{r categorical}
-# 3.2. CATEGORICAL VARIABLES (Bar Charts)
-categorical_vars <- names(books_clean %>% select(where(~ !is.numeric(.))))
+# 4.14 Categorical variables (bar charts)
 
-for (v in categorical_vars) {
-  
-  # Safe file name generation
-  safe_v_name <- gsub("[^A-Za-z0-9_]", "_", v)
-  file_path <- file.path(plots_dir, paste0("categorical_bar_", safe_v_name, ".png"))
-  
-  # Create plot using modern .data syntax
-  p <- ggplot(books_clean, aes(x = .data[[v]])) +
+# Review availability indicator (same definition as in Hypothesis 2)
+books_clean$has_reviews <- factor(
+  ifelse(books_clean$n_reviews > 0, "With Reviews", "No Reviews")
+)
+
+# Data frame with the two categorical variables
+cat_df <- data.frame(
+  has_reviews = books_clean$has_reviews,
+  language    = language_for_plot
+)
+
+# Frequency tables
+print(table(cat_df$has_reviews, useNA = "ifany"))
+print(table(cat_df$language, useNA = "ifany"))
+
+for (v in names(cat_df)) {
+
+  file_path <- file.path(plots_dir, paste0("categorical_bar_", v, ".png"))
+
+  p <- ggplot(cat_df, aes(x = .data[[v]])) +
     geom_bar(fill = "forestgreen", color = "black", alpha = 0.7) +
     labs(title = paste("Frequency Count of", v),
          subtitle = "Categorical Breakdown",
@@ -1215,8 +1228,7 @@ for (v in categorical_vars) {
     theme_minimal() +
     theme(axis.text.x = element_text(angle = 45, hjust = 1),
           plot.title = element_text(face = "bold", size = 14))
-  
-  # Save using ggsave()
+
   ggsave(
     filename = file_path,
     plot = p,
